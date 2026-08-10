@@ -21,6 +21,9 @@ This file is the repository-side index of architectural and product decisions. D
 - ADR-008 — Negative stock disabled in V1 posting; no manager override in V1.
 - Tax-ready schema, but tax calculation disabled by default until explicit rules are approved.
 - Production local database must be encrypted at rest; key material protected through Android platform keystore strategy after a validated implementation spike.
+- ADR-009 — **IBEX Operating Engine** is the central authority for operational business logic. UI, repositories, sync, import, automation, and future AI may not bypass it for financial, inventory, settlement, or posted-document writes.
+- Operational logic is composed of focused domain engines/services rather than a single god-class or giant business-logic file.
+- Every state-changing operational action is expressed as an explicit command with permission, invariants, atomic transaction boundary, audit evidence, and reversal/correction behavior where applicable.
 
 ## Proposed / Pending Implementation Validation
 - ADR-002 — Flutter as primary client platform.
@@ -29,16 +32,19 @@ This file is the repository-side index of architectural and product decisions. D
 - Encrypted SQLite implementation details and exact package configuration.
 - Thermal printer and barcode hardware compatibility baseline.
 
-## V1 Schema Design References
+## V1 Architecture / Schema Design References
 - `docs/SCHEMA_DECISIONS_V1.md`
 - `docs/DATABASE_SCHEMA_V1.md`
+- `docs/OPERATING_ENGINE_V1.md`
+- `docs/COMMAND_CATALOG_V1.md`
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
 
-## Remaining Gates Before Schema Freeze
+## Remaining Gates Before Schema / Domain Freeze
+- Complete command-to-schema/accounting/inventory/permission traceability.
 - Validate encrypted SQLite spike on representative Android devices.
 - Validate thermal printer and barcode hardware strategy.
 - Review tax-ready fields for future-safe compatibility.
 - Complete legacy migration mapping and reconciliation rules.
-- Perform structured review of the V1 schema blueprint against every acceptance scenario.
+- Perform structured review of the V1 schema blueprint against every acceptance scenario and Operating Engine command.
