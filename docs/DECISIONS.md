@@ -24,6 +24,10 @@ This file is the repository-side index of architectural and product decisions. D
 - ADR-009 — **IBEX Operating Engine** is the central authority for operational business logic. UI, repositories, sync, import, automation, and future AI may not bypass it for financial, inventory, settlement, or posted-document writes.
 - Operational logic is composed of focused domain engines/services rather than a single god-class or giant business-logic file.
 - Every state-changing operational action is expressed as an explicit command with permission, invariants, atomic transaction boundary, audit evidence, and reversal/correction behavior where applicable.
+- ADR-010 — **Canonical Domain Modules:** every recurring business concept or record has exactly one canonical owner module. Different screens may use different projections, but may not define competing truth or duplicated lifecycle rules.
+- ADR-011 — **Reusable Behavior Ownership:** every repeated business rule, calculation, validation, state transition, permission decision, numbering rule, stock rule, settlement rule, or formatting contract has exactly one owner module.
+- Shared presentation components may reuse interaction/visual patterns, but domain policy may not be hidden inside shared widgets.
+- Import, sync, automation, reports, dashboards, and future AI must consume the same canonical domain/application contracts rather than reimplementing business logic.
 
 ## Proposed / Pending Implementation Validation
 - ADR-002 — Flutter as primary client platform.
@@ -37,12 +41,15 @@ This file is the repository-side index of architectural and product decisions. D
 - `docs/DATABASE_SCHEMA_V1.md`
 - `docs/OPERATING_ENGINE_V1.md`
 - `docs/COMMAND_CATALOG_V1.md`
+- `docs/CENTRAL_MODULES_CATALOG_V1.md`
+- `docs/REUSE_OWNERSHIP_RULES_V1.md`
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
 
 ## Remaining Gates Before Schema / Domain Freeze
 - Complete command-to-schema/accounting/inventory/permission traceability.
+- Complete command-to-owner-module traceability.
 - Validate encrypted SQLite spike on representative Android devices.
 - Validate thermal printer and barcode hardware strategy.
 - Review tax-ready fields for future-safe compatibility.
