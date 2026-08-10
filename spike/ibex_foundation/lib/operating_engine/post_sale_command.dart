@@ -17,6 +17,7 @@ class PostSaleCommand {
     required this.userId,
     required this.warehouseId,
     required this.currencyCode,
+    required this.baseCurrencyCode,
     required this.exchangeRateScaled,
     required this.cashAccountId,
     required this.cashLedgerAccountId,
@@ -32,6 +33,7 @@ class PostSaleCommand {
   final String userId;
   final String warehouseId;
   final String currencyCode;
+  final String baseCurrencyCode;
   final int exchangeRateScaled;
   final String cashAccountId;
   final String cashLedgerAccountId;
