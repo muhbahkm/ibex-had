@@ -3,7 +3,7 @@
 Last updated: 2026-08-11
 
 ## Current Phase
-**Architecture, V1 schema/domain freeze-candidate review, central module ownership definition, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
+**Architecture, V1 schema/domain freeze-candidate review, central ownership/traceability definition, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
 
 ## Completed
 - Current legacy repository inspected.
@@ -12,9 +12,7 @@ Last updated: 2026-08-11
 - Production Supabase redesign boundary fixed as READ ONLY.
 - Notion Product & Engineering Hub created.
 - Product vision, architecture, database, accounting, inventory, POS, security, backup, sync, migration, testing, and roadmap areas created.
-- Feature registry created in Notion.
-- Architecture decision registry created in Notion.
-- Risk/open-question registry created in Notion.
+- Feature registry, architecture decision registry, and risk/open-question registry created in Notion.
 - Project governance, continuity protocol, and design-language rules documented.
 - User-approved visual reference recorded as the design direction for IBEX 2.0.
 - Critical financial/storage decisions accepted for V1.
@@ -24,8 +22,11 @@ Last updated: 2026-08-11
 - V1 Operating Engine architecture and initial state-changing command catalog documented.
 - ADR-010 accepted: **Canonical Domain Modules** — one canonical owner for every recurring business concept/record.
 - ADR-011 accepted: **Reusable Behavior Ownership** — one owner for every repeated business behavior/rule.
-- V1 Central Modules Catalog documented.
-- V1 Reuse & Ownership Rules documented.
+- V1 Central Modules Catalog and Reuse & Ownership Rules documented.
+- V1 Command Traceability Matrix completed.
+- V1 Ownership & Traceability Matrix completed.
+- V1 Document Lifecycle & State Transition Contract completed.
+- V1 Domain Error Catalog completed.
 
 ## Current Constraints
 - Production Supabase: **READ ONLY**.
@@ -48,14 +49,12 @@ State-changing behavior is represented as explicit commands such as `PostSale`, 
 This is a coordinated architecture, not one giant file or god-class.
 
 ## Canonical module ownership
-IBEX now applies **Single Behavior, Single Source**:
+IBEX applies **Single Behavior, Single Source**:
 - canonical records have one domain owner;
 - repeated business behaviors have one behavior owner;
 - canonical value objects have one implementation;
 - presentation may have multiple projections but cannot redefine business truth;
 - technical capabilities are reusable infrastructure and do not decide business validity.
-
-Initial canonical owners include Customer, Supplier, Product, Unit, Warehouse, Sales, Purchases, Accounting, Inventory, Settlement, Cash/Treasury, Currency/FX, Document Lifecycle, Numbering, Authorization, Audit, and Reversal/Correction.
 
 ## Schema Freeze Candidate 1 — Mandatory Additions
 1. rebuildable `inventory_balances` cache;
@@ -70,16 +69,15 @@ Initial canonical owners include Customer, Supplier, Product, Unit, Warehouse, S
 10. transaction/base-currency snapshots on posted financial records.
 
 ## Remaining Critical Gates Before Full Scaffold
-1. Update the detailed schema blueprint with every Freeze Candidate 1 addition.
-2. Produce `COMMAND_TRACEABILITY_V1.md` mapping every state-changing command to permissions, owner modules, tables, accounting effects, stock effects, audit, reversal, and acceptance scenarios.
-3. Produce a canonical-record ownership matrix mapping each table/model/query projection to its owner module.
-4. Produce a document-state transition matrix and domain error catalog.
-5. Cross-review every repeated behavior for duplicate ownership or UI-owned business logic.
-6. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
-7. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
-8. Review future-safe tax metadata without enabling tax behavior.
-9. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
-10. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
+1. Update the detailed schema blueprint with every Freeze Candidate 1 addition and ownership mapping.
+2. Cross-review every command against schema, accounting, inventory, lifecycle, domain errors, permissions, audit, and acceptance tests.
+3. Resolve any inconsistencies found by that cross-review.
+4. Produce the technical-spike implementation plan.
+5. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
+6. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
+7. Review future-safe tax metadata without enabling tax behavior.
+8. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
+9. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
 
 ## Current Design Artifacts
 - `docs/SCHEMA_DECISIONS_V1.md`
@@ -87,8 +85,12 @@ Initial canonical owners include Customer, Supplier, Product, Unit, Warehouse, S
 - `docs/SCHEMA_CROSS_REVIEW_V1.md`
 - `docs/OPERATING_ENGINE_V1.md`
 - `docs/COMMAND_CATALOG_V1.md`
+- `docs/COMMAND_TRACEABILITY_V1.md`
 - `docs/CENTRAL_MODULES_CATALOG_V1.md`
 - `docs/REUSE_OWNERSHIP_RULES_V1.md`
+- `docs/OWNERSHIP_TRACEABILITY_V1.md`
+- `docs/DOCUMENT_LIFECYCLE_V1.md`
+- `docs/DOMAIN_ERROR_CATALOG_V1.md`
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
@@ -97,16 +99,13 @@ Initial canonical owners include Customer, Supplier, Product, Unit, Warehouse, S
 - `docs/DESIGN_SYSTEM.md`
 
 ## Next Planned Work
-1. Update `DATABASE_SCHEMA_V1.md` to incorporate all Freeze Candidate 1 changes.
-2. Produce command-to-owner/schema/accounting/inventory/permission traceability.
-3. Produce canonical-record ownership and query-projection mapping.
-4. Produce document lifecycle/state-transition and domain-error contracts.
-5. Cross-review all commands and owner modules against schema, posting matrix, inventory movement matrix, and acceptance tests.
-6. Produce the technical-spike implementation plan.
-7. Create an isolated spike branch only after documentation is internally consistent.
-8. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
-9. Validate printing/barcode constraints.
-10. Review spike evidence and only then freeze the V1 schema/domain/ownership contracts and scaffold the full application.
+1. Update `DATABASE_SCHEMA_V1.md` to match Freeze Candidate 1, lifecycle, error, and ownership contracts.
+2. Perform the first full command/schema/owner/acceptance cross-review and publish findings.
+3. Produce the technical-spike implementation plan and dependency-validation checklist.
+4. Create an isolated spike branch only after documentation is internally consistent.
+5. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
+6. Validate printing/barcode constraints.
+7. Review spike evidence and only then freeze the V1 schema/domain/ownership contracts and scaffold the full application.
 
 ## Resume Protocol
-If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_CATALOG_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/REUSE_OWNERSHIP_RULES_V1.md`, `docs/DESIGN_SYSTEM.md`, `docs/SCHEMA_CROSS_REVIEW_V1.md`, and the active schema/acceptance artifacts before taking action.
+If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_CATALOG_V1.md`, `docs/COMMAND_TRACEABILITY_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/OWNERSHIP_TRACEABILITY_V1.md`, `docs/DOCUMENT_LIFECYCLE_V1.md`, `docs/DOMAIN_ERROR_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, and the active schema/acceptance artifacts before taking action.
