@@ -1,37 +1,37 @@
 # IBEX 2.0 — Local Database Schema Blueprint V1
 
-Status: **Freeze Candidate 2 — design contract, not yet implemented**
+Status: **Freeze Candidate 2 — physical schema decisions closed, implementation not started**
 
-Source of truth when implementation starts: GitHub migrations + Drift table definitions + executable domain tests. Production Supabase remains strictly read-only during this redesign.
+Source of truth when implementation starts: GitHub migrations and Drift table definitions. Production Supabase remains read-only during this redesign.
 
 ## Global conventions
 - Primary keys: UUID text generated locally.
-- Timestamps: UTC ISO-8601; business date stored separately where legally/operationally meaningful.
+- Timestamps: UTC ISO-8601 values; UI converts to local time.
 - Monetary values: signed INTEGER scaled by 10,000.
-- Exchange rates: signed INTEGER scaled by 100,000,000.
-- Quantities: signed INTEGER; default internal quantity scale 1,000 unless unit policy requires otherwise.
-- Posted financial/inventory documents are immutable.
-- Corrections are new linked compensating documents/entries/movements.
-- Foreign keys enabled and enforced.
-- Financial/inventory state-changing commands execute inside one explicit DB transaction.
-- All rendered digits use Latin `0-9`.
-- No UI/report/dashboard/import/sync layer owns canonical balances or posting logic.
-- Transaction currency + base currency snapshots are frozen on every posted financial record.
+- Exchange/tax rates: signed INTEGER scaled by 100,000,000.
+- Quantities: signed INTEGER scaled by 1,000,000.
+- Posted records are immutable; reversals/returns create new linked records.
+- All foreign keys are enabled and enforced.
+- All financial/stock workflows execute inside explicit database transactions.
+- All user-facing numbers render with Latin digits only.
+- UUID is canonical identity; human document numbers are separate immutable business identifiers after posting.
 
 ## Core identity and configuration
 ### businesses
-- id PK
+- id
 - code UNIQUE
 - name
 - legal_name nullable
 - base_currency_id FK
 - timezone
+- tax_registration_no nullable
+- tax_enabled boolean default false
 - is_active
 - created_at
 - updated_at
 
 ### users
-- id PK
+- id
 - business_id FK
 - username UNIQUE per business
 - display_name
@@ -43,14 +43,14 @@ Source of truth when implementation starts: GitHub migrations + Drift table defi
 - updated_at
 
 ### roles
-- id PK
+- id
 - business_id FK
 - name
 - is_system
 - created_at
 
 ### permissions
-- id PK
+- id
 - code UNIQUE
 - description
 
@@ -60,7 +60,7 @@ Source of truth when implementation starts: GitHub migrations + Drift table defi
 - PRIMARY KEY(role_id, permission_id)
 
 ### currencies
-- id PK
+- id
 - code UNIQUE
 - name
 - symbol
@@ -68,7 +68,7 @@ Source of truth when implementation starts: GitHub migrations + Drift table defi
 - is_active
 
 ### exchange_rates
-- id PK
+- id
 - business_id FK
 - from_currency_id FK
 - to_currency_id FK
@@ -76,62 +76,68 @@ Source of truth when implementation starts: GitHub migrations + Drift table defi
 - effective_at
 - source
 - created_by_user_id FK
-- UNIQUE(business_id, from_currency_id, to_currency_id, effective_at)
 
-## Transactional document numbering
 ### document_sequences
-Canonical owner: NumberingModule.
-- id PK
+Application-owned visible business numbering.
+- id
 - business_id FK
 - document_type
+- scope_key
 - prefix
-- fiscal_scope nullable
 - next_value INTEGER
-- padding INTEGER
+- padding INTEGER default 6
 - updated_at
-- UNIQUE(business_id, document_type, fiscal_scope)
+- UNIQUE(business_id, document_type, scope_key)
 
-Rules:
-- allocation occurs inside the same transaction as document creation/posting where required;
-- no UI-generated authoritative sequence numbers;
-- future sync may add device ranges, but V1 remains single-local-authority.
+Default V1 scope: Gregorian year. Example: `SAL-2026-000001`.
 
 ## Parties
 ### customers
-- id PK
+- id
 - business_id FK
 - code UNIQUE per business
 - name
 - phone nullable
 - address nullable
 - notes nullable
+- tax_registration_no nullable
 - credit_limit_scaled nullable
 - is_active
 - created_at
 - updated_at
 
 ### suppliers
-Same canonical pattern as customers with supplier-specific code/notes.
+- id
+- business_id FK
+- code UNIQUE per business
+- name
+- phone nullable
+- address nullable
+- notes nullable
+- tax_registration_no nullable
+- is_active
+- created_at
+- updated_at
 
 ## Products and units
 ### categories
-- id PK
+- id
 - business_id FK
 - name
 - parent_id nullable self-FK
 - is_active
 
 ### units
-- id PK
+- id
 - business_id FK
 - code
 - name
-- quantity_decimals
+- allowed_decimals INTEGER CHECK 0..6
+- display_decimals INTEGER CHECK 0..6 and <= allowed_decimals
 - is_active
-- UNIQUE(business_id, code)
 
 ### products
-- id PK
+- id
 - business_id FK
 - sku nullable UNIQUE per business
 - barcode nullable
@@ -145,16 +151,16 @@ Same canonical pattern as customers with supplier-specific code/notes.
 - updated_at
 
 ### product_units
-- id PK
+- id
 - product_id FK
 - unit_id FK
-- conversion_factor_scaled
+- conversion_factor_scaled INTEGER scale 1e6
 - is_default_sale_unit
 - is_default_purchase_unit
 - UNIQUE(product_id, unit_id)
 
 ### product_prices
-- id PK
+- id
 - product_id FK
 - unit_id FK
 - currency_id FK
@@ -165,7 +171,7 @@ Same canonical pattern as customers with supplier-specific code/notes.
 
 ## Warehousing
 ### warehouses
-- id PK
+- id
 - business_id FK
 - code UNIQUE per business
 - name
@@ -173,8 +179,8 @@ Same canonical pattern as customers with supplier-specific code/notes.
 - is_active
 
 ### stock_movements
-Canonical source for inventory truth.
-- id PK
+One warehouse per movement header.
+- id
 - business_id FK
 - warehouse_id FK
 - movement_type
@@ -185,11 +191,10 @@ Canonical source for inventory truth.
 - posted_at nullable
 - posted_by_user_id nullable FK
 - reversal_of_id nullable self-FK
-- operation_id nullable
 - notes nullable
 
 ### stock_movement_items
-- id PK
+- id
 - stock_movement_id FK
 - product_id FK
 - unit_id FK
@@ -201,7 +206,7 @@ Canonical source for inventory truth.
 - source_line_id nullable
 
 ### inventory_balances
-Rebuildable projection/cache only; never independent truth.
+Rebuildable operational cache derived from posted stock movements.
 - warehouse_id FK
 - product_id FK
 - quantity_scaled
@@ -210,23 +215,50 @@ Rebuildable projection/cache only; never independent truth.
 - updated_at
 - PRIMARY KEY(warehouse_id, product_id)
 
-### inventory_counts
-- id PK
+### stock_transfers
+Canonical business document for warehouse transfer.
+- id
 - business_id FK
-- warehouse_id FK
 - document_no UNIQUE per business
+- source_warehouse_id FK
+- destination_warehouse_id FK
+- status (draft, posted, reversed)
+- transfer_at
+- source_movement_id nullable FK
+- destination_movement_id nullable FK
+- created_by_user_id FK
+- posted_by_user_id nullable FK
+- posted_at nullable
+- reversal_of_id nullable self-FK
+- notes nullable
+
+Constraint: source_warehouse_id != destination_warehouse_id.
+
+### stock_transfer_items
+- id
+- stock_transfer_id FK
+- product_id FK
+- unit_id FK
+- quantity_scaled
+- base_quantity_scaled
+- transferred_unit_cost_scaled
+- transferred_total_cost_scaled
+
+Posting creates two stock movements atomically: `TRANSFER_OUT` and `TRANSFER_IN`, both linked to the same transfer document.
+
+### inventory_counts
+- id
+- business_id FK
+- document_no UNIQUE per business
+- warehouse_id FK
 - status (draft, submitted, approved, posted, reversed)
 - counted_at
-- submitted_at nullable
-- approved_at nullable
 - posted_at nullable
 - created_by_user_id FK
-- approved_by_user_id nullable FK
 - posted_by_user_id nullable FK
-- reversal_of_id nullable self-FK
 
 ### inventory_count_items
-- id PK
+- id
 - inventory_count_id FK
 - product_id FK
 - system_quantity_scaled
@@ -236,38 +268,34 @@ Rebuildable projection/cache only; never independent truth.
 
 ## Sales
 ### sales
-- id PK
+- id
 - business_id FK
 - document_no UNIQUE per business
 - customer_id nullable FK
 - warehouse_id FK
 - currency_id FK
+- base_currency_id FK snapshot
 - exchange_rate_scaled
-- base_currency_id FK
 - status (draft, posted, reversed)
 - sale_at
-- business_date
 - subtotal_scaled
 - discount_scaled
-- tax_scaled
+- tax_mode (disabled, exclusive, inclusive) default disabled
+- tax_total_scaled default 0
 - total_scaled
-- total_base_scaled
+- base_total_scaled
 - paid_scaled
-- paid_base_scaled
 - balance_scaled
-- balance_base_scaled
+- stock_movement_id nullable FK
+- journal_entry_id nullable FK
 - notes nullable
 - created_by_user_id FK
 - posted_by_user_id nullable FK
 - posted_at nullable
 - reversal_of_id nullable self-FK
-- return_of_id nullable self-FK
-- journal_entry_id nullable FK
-- stock_movement_id nullable FK
-- operation_id nullable UNIQUE
 
 ### sale_items
-- id PK
+- id
 - sale_id FK
 - product_id FK
 - unit_id FK
@@ -276,83 +304,169 @@ Rebuildable projection/cache only; never independent truth.
 - unit_price_scaled
 - gross_scaled
 - discount_scaled
-- tax_scaled
+- tax_code_snapshot nullable
+- tax_rate_scaled nullable
+- tax_amount_scaled default 0
+- price_includes_tax boolean default false
 - net_scaled
-- net_base_scaled
 - cogs_unit_cost_scaled
 - cogs_total_scaled
-- cogs_total_base_scaled
-- source_sale_item_id nullable self-FK
 
 ### sales_returns
-Implemented as dedicated linked commercial documents or a typed sale document; exact physical-table choice may be finalized in implementation, but canonical contract requires source sale + source line links, immutable posting, accounting reversal semantics, and stock-in movement.
-
-## Purchases
-### purchases
-- id PK
+Dedicated immutable return document.
+- id
 - business_id FK
 - document_no UNIQUE per business
-- supplier_id FK
+- source_sale_id FK
+- customer_id nullable FK
 - warehouse_id FK
 - currency_id FK
+- base_currency_id FK snapshot
 - exchange_rate_scaled
-- base_currency_id FK
 - status (draft, posted, reversed)
-- purchase_at
-- business_date
+- return_at
 - subtotal_scaled
 - discount_scaled
-- tax_scaled
+- tax_mode (disabled, exclusive, inclusive) default disabled
+- tax_total_scaled default 0
 - total_scaled
-- total_base_scaled
-- paid_scaled
-- paid_base_scaled
-- balance_scaled
-- balance_base_scaled
-- notes nullable
+- base_total_scaled
+- stock_movement_id nullable FK
+- journal_entry_id nullable FK
 - created_by_user_id FK
 - posted_by_user_id nullable FK
 - posted_at nullable
 - reversal_of_id nullable self-FK
-- return_of_id nullable self-FK
-- journal_entry_id nullable FK
+- notes nullable
+
+### sales_return_items
+- id
+- sales_return_id FK
+- source_sale_item_id FK
+- product_id FK
+- unit_id FK
+- quantity_scaled
+- base_quantity_scaled
+- unit_price_scaled
+- gross_scaled
+- discount_scaled
+- tax_code_snapshot nullable
+- tax_rate_scaled nullable
+- tax_amount_scaled default 0
+- price_includes_tax boolean default false
+- net_scaled
+- original_cogs_unit_cost_scaled
+- original_cogs_total_scaled
+
+Rule: cumulative posted returned quantity per source sale line may not exceed the original posted quantity.
+
+## Purchases
+### purchases
+- id
+- business_id FK
+- document_no UNIQUE per business
+- supplier_id nullable FK
+- warehouse_id FK
+- currency_id FK
+- base_currency_id FK snapshot
+- exchange_rate_scaled
+- status (draft, posted, reversed)
+- purchase_at
+- subtotal_scaled
+- discount_scaled
+- tax_mode (disabled, exclusive, inclusive) default disabled
+- tax_total_scaled default 0
+- total_scaled
+- base_total_scaled
+- paid_scaled
+- balance_scaled
 - stock_movement_id nullable FK
-- operation_id nullable UNIQUE
+- journal_entry_id nullable FK
+- created_by_user_id FK
+- posted_by_user_id nullable FK
+- posted_at nullable
+- reversal_of_id nullable self-FK
+- notes nullable
 
 ### purchase_items
-- id PK
+- id
 - purchase_id FK
 - product_id FK
 - unit_id FK
 - quantity_scaled
 - base_quantity_scaled
 - unit_cost_scaled
-- unit_cost_base_scaled
 - gross_scaled
 - discount_scaled
-- tax_scaled
+- tax_code_snapshot nullable
+- tax_rate_scaled nullable
+- tax_amount_scaled default 0
+- price_includes_tax boolean default false
 - net_scaled
-- net_base_scaled
 - receipt_unit_cost_scaled
 - receipt_total_cost_scaled
-- source_purchase_item_id nullable self-FK
 
 ### purchase_returns
-Same lifecycle principles as sales returns: explicit source links, immutable posting, stock-out movement, and compensating accounting entry.
+Dedicated immutable return document.
+- id
+- business_id FK
+- document_no UNIQUE per business
+- source_purchase_id FK
+- supplier_id nullable FK
+- warehouse_id FK
+- currency_id FK
+- base_currency_id FK snapshot
+- exchange_rate_scaled
+- status (draft, posted, reversed)
+- return_at
+- subtotal_scaled
+- discount_scaled
+- tax_mode (disabled, exclusive, inclusive) default disabled
+- tax_total_scaled default 0
+- total_scaled
+- base_total_scaled
+- stock_movement_id nullable FK
+- journal_entry_id nullable FK
+- created_by_user_id FK
+- posted_by_user_id nullable FK
+- posted_at nullable
+- reversal_of_id nullable self-FK
+- notes nullable
+
+### purchase_return_items
+- id
+- purchase_return_id FK
+- source_purchase_item_id FK
+- product_id FK
+- unit_id FK
+- quantity_scaled
+- base_quantity_scaled
+- unit_cost_scaled
+- gross_scaled
+- discount_scaled
+- tax_code_snapshot nullable
+- tax_rate_scaled nullable
+- tax_amount_scaled default 0
+- price_includes_tax boolean default false
+- net_scaled
+- original_receipt_unit_cost_scaled
+- original_receipt_total_cost_scaled
+
+Rule: cumulative posted returned quantity per source purchase line may not exceed the original posted quantity.
 
 ## Cash and settlement
 ### cash_accounts
-- id PK
+- id
 - business_id FK
 - code UNIQUE per business
 - name
 - account_type (cash, bank, wallet)
 - currency_id FK
-- ledger_account_id FK NOT NULL
+- ledger_account_id FK
 - is_active
 
 ### payments
-- id PK
+- id
 - business_id FK
 - payment_no UNIQUE per business
 - direction (in, out)
@@ -360,39 +474,31 @@ Same lifecycle principles as sales returns: explicit source links, immutable pos
 - party_id nullable
 - cash_account_id FK
 - currency_id FK
+- base_currency_id FK snapshot
 - exchange_rate_scaled
-- base_currency_id FK
 - amount_scaled
 - base_amount_scaled
-- status (draft, posted, reversed)
+- status (posted, reversed)
 - payment_at
-- business_date
+- journal_entry_id nullable FK
 - notes nullable
 - created_by_user_id FK
-- posted_by_user_id nullable FK
 - posted_at nullable
 - reversal_of_id nullable self-FK
-- journal_entry_id nullable FK
-- operation_id nullable UNIQUE
 
 ### payment_allocations
-Canonical settlement ledger; allocation is explicit, auditable, and reversible through compensating allocation records or linked reversal payment.
-- id PK
+- id
 - payment_id FK
 - target_type
 - target_id
-- target_currency_id FK
 - allocated_amount_scaled
+- target_currency_id FK
 - target_amount_scaled
-- target_base_amount_scaled
 - realized_fx_difference_scaled
-- created_at
-- source_allocation_id nullable self-FK
-- is_reversal
 
 ## Accounting
 ### accounts
-- id PK
+- id
 - business_id FK
 - code UNIQUE per business
 - name
@@ -403,23 +509,20 @@ Canonical settlement ledger; allocation is explicit, auditable, and reversible t
 - is_active
 
 ### journal_entries
-- id PK
+- id
 - business_id FK
 - entry_no UNIQUE per business
 - entry_at
-- business_date
 - source_type
 - source_id
-- base_currency_id FK
-- status (draft, posted, reversed)
+- status (posted, reversed)
 - description
 - posted_by_user_id nullable FK
 - posted_at nullable
 - reversal_of_id nullable self-FK
-- operation_id nullable UNIQUE
 
 ### journal_lines
-- id PK
+- id
 - journal_entry_id FK
 - account_id FK
 - party_type nullable
@@ -432,38 +535,36 @@ Canonical settlement ledger; allocation is explicit, auditable, and reversible t
 - base_credit_scaled
 - description nullable
 
-Invariant: for every posted entry, `sum(base_debit_scaled) == sum(base_credit_scaled)`.
+Invariant: sum(base_debit_scaled) = sum(base_credit_scaled) for every posted entry.
 
 ## Expenses
 ### expense_categories
-- id PK
+- id
 - business_id FK
 - name
 - ledger_account_id FK
 - is_active
 
 ### expenses
-- id PK
+- id
 - business_id FK
 - expense_no UNIQUE per business
 - category_id FK
 - cash_account_id FK
 - currency_id FK
+- base_currency_id FK snapshot
 - exchange_rate_scaled
-- base_currency_id FK
 - amount_scaled
 - base_amount_scaled
 - expense_at
-- business_date
-- status (draft, posted, reversed)
+- status (posted, reversed)
 - notes nullable
 - journal_entry_id nullable FK
 - reversal_of_id nullable self-FK
-- operation_id nullable UNIQUE
 
 ## Shifts / cash closing
 ### shifts
-- id PK
+- id
 - business_id FK
 - user_id FK
 - cash_account_id FK
@@ -473,29 +574,33 @@ Invariant: for every posted entry, `sum(base_debit_scaled) == sum(base_credit_sc
 - expected_closing_scaled nullable
 - actual_closing_scaled nullable
 - difference_scaled nullable
-- status (open, closed, reversed where supported)
-- close_operation_id nullable UNIQUE
+- status (open, closed)
 
-## Audit and local system state
+## Idempotency, audit, and local system state
+### operation_log
+- operation_id PRIMARY KEY
+- business_id FK
+- command_name
+- entity_type nullable
+- entity_id nullable
+- status
+- result_json nullable
+- started_at
+- completed_at nullable
+
+A successful operation id cannot be applied twice.
+
 ### audit_logs
-Append-only canonical audit evidence.
-- id PK
+Append-only by application contract.
+- id
 - business_id FK
 - user_id nullable FK
 - operation_id nullable
-- command_name
 - entity_type
 - entity_id
 - action
 - occurred_at
 - metadata_json
-- previous_hash nullable
-- record_hash nullable
-
-Rules:
-- application code has no update/delete command for audit rows;
-- sensitive commands emit audit in the same transaction when feasible;
-- audit does not replace domain tables as truth.
 
 ### app_settings
 - business_id FK
@@ -508,21 +613,9 @@ Rules:
 - key PRIMARY KEY
 - value
 
-### operation_log
-Idempotency/correlation registry for state-changing commands.
-- operation_id PK
-- command_name
-- business_id FK
-- status
-- created_at
-- completed_at nullable
-- result_entity_type nullable
-- result_entity_id nullable
-
 ### sync_outbox
-Reserved for future synchronization; inactive in V1 runtime.
-- id PK
-- operation_id nullable
+Reserved for future synchronization; not active in V1 runtime.
+- id
 - entity_type
 - entity_id
 - operation
@@ -531,70 +624,88 @@ Reserved for future synchronization; inactive in V1 runtime.
 - sync_status
 
 ## Legacy migration and reconciliation
-These tables are import-tooling support, not operational truth.
-
 ### legacy_import_runs
-- id PK
+- id
 - source_system
 - started_at
 - completed_at nullable
 - status
-- source_fingerprint
+- source_fingerprint nullable
 - notes nullable
 
-### legacy_entity_map
-- id PK
+### legacy_id_map
 - import_run_id FK
-- entity_type
+- legacy_entity_type
 - legacy_id
-- new_id
-- mapping_status
-- UNIQUE(import_run_id, entity_type, legacy_id)
+- new_entity_type
+- new_entity_id
+- PRIMARY KEY(import_run_id, legacy_entity_type, legacy_id)
 
 ### legacy_reconciliation
-- id PK
+- id
 - import_run_id FK
 - metric_code
-- legacy_value_scaled nullable
-- new_value_scaled nullable
-- variance_scaled nullable
+- source_value_scaled nullable
+- target_value_scaled nullable
+- difference_scaled nullable
 - status
 - details_json nullable
 
+## Tax-disabled invariant for V1
+While `businesses.tax_enabled = false`:
+- document `tax_mode` must equal `disabled`;
+- document `tax_total_scaled` must equal 0;
+- line `tax_amount_scaled` must equal 0;
+- no jurisdiction-specific tax calculation is executed.
+
+## Quantity invariant for V1
+- Canonical quantity scale = 1e6 everywhere.
+- Unit `allowed_decimals` controls accepted input precision.
+- Unit `display_decimals` controls presentation only.
+- Canonical stock/accounting logic never uses binary floating point for quantity or money.
+
+## Document numbering invariant
+Visible numbers are allocated by `document_sequences` inside the same application transaction as document creation/posting. UUID remains canonical identity. SQLite row IDs/AUTOINCREMENT are not the business numbering source.
+
+Default prefixes:
+- SAL sale
+- PUR purchase
+- SRT sales return
+- PRT purchase return
+- RCT customer receipt
+- PAY supplier payment
+- EXP expense
+- STX stock transfer
+- CNT inventory count/adjustment
+- JRN journal entry
+
 ## Required indexes
 At minimum:
-- all FK columns used in operational joins;
-- sales(business_id, sale_at), sales(customer_id, status), sales(operation_id);
-- purchases(business_id, purchase_at), purchases(supplier_id, status), purchases(operation_id);
-- stock_movements(warehouse_id, movement_at), stock_movements(reference_type, reference_id);
-- stock_movement_items(product_id);
-- inventory_balances(product_id, warehouse_id);
-- journal_entries(business_id, entry_at), journal_entries(source_type, source_id);
-- journal_lines(account_id), journal_lines(party_type, party_id);
-- payments(party_type, party_id, payment_at), payments(operation_id);
-- payment_allocations(payment_id), payment_allocations(target_type, target_id);
-- products(business_id, name), products(barcode);
-- audit_logs(business_id, occurred_at), audit_logs(operation_id);
-- legacy_entity_map(import_run_id, entity_type, legacy_id).
+- every FK used in common joins
+- sales(business_id, sale_at)
+- sales(customer_id, status)
+- sales_returns(source_sale_id, status)
+- purchases(supplier_id, status)
+- purchase_returns(source_purchase_id, status)
+- stock_movements(warehouse_id, movement_at)
+- stock_movement_items(product_id)
+- stock_transfers(business_id, transfer_at)
+- journal_entries(business_id, entry_at)
+- journal_lines(account_id)
+- payments(party_type, party_id, payment_at)
+- payment_allocations(target_type, target_id)
+- products(business_id, name)
+- products(barcode)
+- operation_log(business_id, command_name)
 
-## Canonical ownership constraints
-- AccountingModule owns journal entries/lines and accounting invariants.
-- InventoryModule owns stock movements/items and rebuildable inventory projections.
-- SettlementModule owns payments and payment allocations.
-- NumberingModule owns document_sequences.
-- AuditModule owns append-only audit records.
-- ReversalCorrectionModule owns reversal/correction linkage rules.
-- UI/report/query projections never write canonical financial or inventory truth.
+## Schema freeze gates
+Migration `v1` remains blocked until:
+1. encryption + Android Keystore spike passes;
+2. Drift migration behavior under encryption passes;
+3. backup/restore round trip passes;
+4. critical command/domain tests pass on the spike schema;
+5. legacy migration reconciliation rules are validated;
+6. thermal printing and barcode constraints are validated for the target Android baseline;
+7. UI spike confirms Noto typography, RTL, Latin digits, and approved motion/design direction.
 
-## Freeze Candidate 2 gates
-This blueprint may become migration `v1` only after:
-1. Command traceability has no unmapped state-changing V1 command.
-2. Ownership traceability has no competing canonical owner.
-3. Document lifecycle and domain-error contracts match the schema.
-4. Posting and inventory movement matrices match all posted commands.
-5. Acceptance scenarios cover cash, credit, partial settlement, return, reversal, stock transfer, inventory adjustment, expense, and FX settlement.
-6. Encryption/Keystore spike passes on representative Android devices.
-7. Printer/barcode spike confirms chosen hardware strategy.
-8. Tax-ready metadata review closes without enabling tax behavior.
-9. Legacy migration/reconciliation mapping is complete enough to protect existing balances.
-10. Full architecture cross-review finds no critical contradiction.
+Physical representation of returns, stock transfers, tax-ready metadata, quantity precision, and visible document numbering is now closed by `PHYSICAL_SCHEMA_DECISIONS_V1.md`.
