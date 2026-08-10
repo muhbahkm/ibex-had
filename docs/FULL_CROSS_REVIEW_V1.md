@@ -1,12 +1,12 @@
 # IBEX 2.0 — Full Architecture Cross-Review V1
 
-Status: **Freeze Candidate 2 review artifact**
+Status: **Freeze Candidate 2 — physical-schema clarifications closed**
 
 ## Scope
 Cross-review of Operating Engine, command catalog, central ownership, schema, document lifecycle, domain errors, accounting posting, inventory movement, settlement, audit, and acceptance contracts.
 
 ## Review result
-No design-blocking contradiction was found in the current V1 direction after promoting the schema to Freeze Candidate 2. Remaining items are implementation-validation gates, not unresolved ownership conflicts.
+No design-blocking contradiction remains in the current V1 direction. The five previously open physical-schema clarifications are now closed by ADR-012 through ADR-016 and `PHYSICAL_SCHEMA_DECISIONS_V1.md`. Remaining gates are executable implementation validation, not unresolved domain/schema ownership.
 
 ## Verified invariants
 1. Every financial/inventory state change enters through an explicit Operating Engine command.
@@ -23,10 +23,10 @@ No design-blocking contradiction was found in the current V1 direction after pro
 12. Audit evidence is append-only by application contract.
 13. Operation IDs provide the basis for idempotency/correlation.
 14. Legacy import uses mapping + reconciliation rather than direct blind copying.
+15. Canonical quantity uses one fixed 1e6 scale with per-unit allowed/display precision.
+16. Tax behavior is disabled by default even though future-safe metadata exists.
 
 ## Command path validation
-Expected command execution path:
-
 ```text
 Caller
   -> Command Contract
@@ -44,29 +44,30 @@ No presentation layer is authorized to bypass this path for posted truth.
 
 ## High-risk flows reviewed
 ### PostSale
-Must atomically create/finalize sale, stock-out movement, COGS snapshot, balanced journal entry, optional payment/allocation, operation log, and audit evidence.
+Atomically finalizes the sale, stock-out movement, COGS snapshot, balanced journal entry, optional payment/allocation, operation log, and audit evidence.
 
 ### PostPurchase
-Must atomically create/finalize purchase, stock-in movement, receipt cost/WAC impact, supplier liability/cash effect, journal entry, operation log, and audit evidence.
+Atomically finalizes the purchase, stock-in movement, receipt cost/WAC impact, supplier liability/cash effect, journal entry, operation log, and audit evidence.
 
 ### ReceiveCustomerPayment / PaySupplier
-Must preserve payment currency, base value, allocations, realized FX difference, cash account ledger mapping, journal entry, audit, and reversal linkage.
+Preserves payment currency, base value, allocations, realized FX difference, cash-account ledger mapping, journal entry, audit, and reversal linkage.
 
-### Return / Reverse
-Must never mutate posted source truth. Source document/lines are referenced explicitly; compensating stock/accounting/settlement effects are created.
+### Sales/Purchase Return
+Uses dedicated immutable return documents linked to source headers and source lines. Posting creates compensating stock/accounting effects and validates cumulative returned quantity against the original posted line.
 
 ### TransferStock
-Must produce paired source-out + destination-in effects under one command transaction or an equivalent balanced transfer representation. Net business inventory value must remain consistent except for explicitly modeled transfer-cost rules.
+Uses one `stock_transfers` business document and two stock movement headers in one application transaction: source `TRANSFER_OUT` and destination `TRANSFER_IN`. The transferred carrying value is preserved; no transfer profit/loss is created merely by moving inventory.
 
 ### InventoryAdjustment
 Requires count lifecycle discipline, approval where configured, valuation snapshot, movement, accounting effect when value changes, and audit.
 
 ### CloseCashShift
-Must compare expected vs actual cash from canonical cash movement truth and record approved difference treatment explicitly rather than silently overwriting balances.
+Compares expected vs actual cash from canonical cash movement truth and records approved difference treatment explicitly rather than silently overwriting balances.
 
 ## Ownership conflict review
 No duplicate canonical ownership accepted. In particular:
 - Money arithmetic -> MoneyModule
+- Quantity arithmetic/precision -> QuantityModule
 - FX -> CurrencyFx/FxModule
 - posting -> Accounting/PostingModule
 - stock availability -> Inventory/StockAvailabilityModule
@@ -77,7 +78,12 @@ No duplicate canonical ownership accepted. In particular:
 - audit -> AuditModule
 - reversal -> ReversalCorrectionModule
 
-Shared UI components may format or request actions but never own these rules.
+## Closed physical-schema decisions
+1. **Returns** — dedicated immutable sales/purchase return tables linked to source documents and lines.
+2. **Transfers** — one transfer document + paired source/destination stock movement headers in one transaction.
+3. **Tax-ready metadata** — registration and posted snapshot fields only; tax engine remains disabled.
+4. **Quantity precision** — fixed canonical scale 1e6; units control allowed/display decimals 0..6.
+5. **Document numbering** — application-owned transactional sequence table; UUID remains canonical identity; default annual human format such as `SAL-2026-000001`.
 
 ## Schema gaps closed in Freeze Candidate 2
 - transactional `document_sequences`;
@@ -89,18 +95,13 @@ Shared UI components may format or request actions but never own these rules.
 - explicit payment allocation ledger;
 - mandatory cash-to-ledger mapping;
 - append-only audit contract;
-- legacy import run, mapping, and reconciliation structures.
+- legacy import run, mapping, and reconciliation structures;
+- explicit transfer document and paired movement model;
+- explicit return document/line model;
+- fixed quantity precision contract;
+- tax-disabled future metadata contract.
 
-## Remaining non-blocking design clarifications before migration v1
-1. Final physical representation of sales/purchase returns: dedicated tables vs typed commercial-document tables. Domain contract is already fixed.
-2. Exact tax-ready metadata fields, with tax behavior disabled.
-3. Exact transfer stock physical representation if one movement header cannot cleanly represent two warehouses.
-4. Exact quantity precision policy by unit category.
-5. Exact local fiscal/document prefix conventions.
-
-These must be resolved before migration v1 but do not change the accepted architecture.
-
-## Implementation-validation gates
+## Remaining implementation-validation gates
 - encrypted SQLite + Android Keystore spike;
 - Drift migration behavior under encryption;
 - backup/restore validation;
@@ -108,7 +109,8 @@ These must be resolved before migration v1 but do not change the accepted archit
 - thermal printer compatibility;
 - barcode scanning/printing compatibility;
 - representative Android performance;
-- domain tests for critical financial/inventory invariants.
+- executable domain tests for critical financial/inventory invariants;
+- legacy migration reconciliation validation.
 
 ## Freeze Candidate 2 conclusion
-Architecture, ownership, and schema are internally aligned enough to begin an isolated technical spike. Full application scaffold remains blocked until the spike passes and the remaining physical-schema clarifications are closed.
+Architecture, ownership, physical schema, and domain contracts are now internally aligned enough to begin the isolated Android technical spike. The production application scaffold remains blocked until the spike passes.
