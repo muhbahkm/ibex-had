@@ -3,7 +3,7 @@
 Last updated: 2026-08-11
 
 ## Current Phase
-**V1 Domain/Schema Freeze Candidate 2 and isolated technical-spike readiness. No production IBEX 2.0 application scaffold has been started yet.**
+**V1 Domain/Schema Freeze Candidate 2 complete enough for isolated Android technical-spike execution. Production application scaffold has not started.**
 
 ## Completed
 - Legacy repository inspected and production Supabase project `IBEX_26` identified.
@@ -23,6 +23,12 @@ Last updated: 2026-08-11
 - Database schema updated to **Freeze Candidate 2**.
 - Full Architecture Cross-Review completed.
 - Technical Spike Plan V1 completed.
+- ADR-012 accepted: dedicated immutable sales/purchase return documents.
+- ADR-013 accepted: one stock-transfer document creates paired source/destination stock movements atomically.
+- ADR-014 accepted: tax-ready metadata only; tax behavior disabled in V1.
+- ADR-015 accepted: fixed canonical quantity scale 1e6 with unit precision policy 0..6 decimals.
+- ADR-016 accepted: application-owned transactional visible document numbering; UUID remains canonical identity.
+- All five former physical-schema clarifications are closed.
 
 ## Current Constraints
 - Production Supabase: **READ ONLY**.
@@ -33,14 +39,16 @@ Last updated: 2026-08-11
 - Calm/premium/minimal design language.
 - Noto Sans Arabic + Noto Sans baseline pending device validation.
 - No UI, report, dashboard, import, sync, automation, repository adapter, or future AI component may create competing financial/inventory/settlement/document-lifecycle/permission truth.
-- No new phase advances unless previous phase gates and regression checks pass.
+- No new production phase advances unless previous phase gates and regression checks pass.
 
 ## Accepted Core Invariants
 - Double-entry accounting.
 - Moving Weighted Average inventory valuation.
 - Money stored as signed Int64 scaled by 10,000.
-- FX rates scaled by 100,000,000.
-- Half-away-from-zero rounding.
+- FX/tax rates scaled by 100,000,000.
+- Quantity stored as signed Int64 scaled by 1,000,000.
+- Unit metadata controls allowed/display quantity decimals from 0 to 6.
+- Half-away-from-zero monetary rounding.
 - Posted documents immutable.
 - Reversal/correction through linked compensating records.
 - Negative stock blocked for V1 posting.
@@ -51,33 +59,27 @@ Last updated: 2026-08-11
 - Operation IDs provide idempotency/correlation basis.
 - Audit is append-only by application contract.
 - Document numbering has one transactional canonical owner.
+- Human document numbers are not SQLite row IDs.
+- Tax behavior remains disabled until explicit approved rules exist.
 
-## Freeze Candidate 2 Additions Now Incorporated
-- `document_sequences`.
-- `operation_log`.
-- explicit base-currency snapshot fields.
-- commercial-document links to journal entries and stock movements.
-- explicit reversal/return source links.
-- sale-line COGS snapshots.
-- purchase receipt-cost snapshots.
-- explicit `payment_allocations` settlement ledger.
-- mandatory cash-account -> ledger-account mapping.
-- append-only audit contract with operation correlation.
-- legacy import run/mapping/reconciliation support.
+## Closed Physical Movement/Schema Decisions
+### Returns
+Dedicated `sales_returns` / `sales_return_items` and `purchase_returns` / `purchase_return_items`, linked to source documents and source lines. Returns create compensating effects and never mutate posted source truth.
 
-## Full Cross-Review Result
-No architecture-blocking contradiction remains in the current V1 direction. Remaining items are controlled implementation/physical-schema validation gates:
-1. final physical representation of sales/purchase returns;
-2. exact stock-transfer physical representation across two warehouses;
-3. exact tax-ready metadata fields while tax behavior remains disabled;
-4. exact quantity precision policy by unit category;
-5. document prefix/fiscal sequencing conventions;
-6. encrypted SQLite + Android Keystore implementation validation;
-7. thermal printer and barcode viability;
-8. UI direction validation on representative Android targets.
+### Warehouse transfers
+`stock_transfers` / `stock_transfer_items` is the business document. Posting creates one `TRANSFER_OUT` movement for the source warehouse and one `TRANSFER_IN` movement for the destination warehouse inside one transaction, preserving carrying value.
+
+### Quantity precision
+Canonical quantity/conversion factor scale = 1e6. `units.allowed_decimals` and `units.display_decimals` govern input/presentation precision.
+
+### Tax readiness
+Minimal tax registration and posted snapshot fields exist, but `tax_enabled=false` forces tax mode disabled and tax amounts to zero.
+
+### Visible numbering
+`document_sequences` allocates business/document/year scoped numbers transactionally, with defaults such as `SAL-2026-000001`; UUID remains canonical identity.
 
 ## Technical Spike
-The next executable work is an isolated disposable spike, not the production scaffold.
+The next executable work is an isolated spike, not the production scaffold.
 
 Planned validation:
 - Flutter Android;
@@ -86,16 +88,20 @@ Planned validation:
 - Android Keystore key protection;
 - encrypted migration + backup/restore;
 - Money/Quantity/FX value objects;
-- minimal local `PostSale` vertical slice proving authorization, stock validation, sale + journal + stock + payment/allocation + audit under one transaction and rollback;
+- minimal local `PostSale` vertical slice proving authorization, stock validation, sale + journal + stock + payment/allocation + operation log + audit under one transaction and rollback;
+- stock-transfer paired movement transaction test;
+- return quantity ceiling / compensating movement test;
+- transactional document-sequence rollback test;
 - Noto + RTL + Latin digits + approved motion/design language;
 - barcode baseline;
 - 58mm/80mm thermal print baseline;
 - performance evidence.
 
-Target branch after governance review: `spike/android-foundation-v1`.
+Target branch: `spike/android-foundation-v1`.
 
 ## Current Design Artifacts
 - `docs/DATABASE_SCHEMA_V1.md`
+- `docs/PHYSICAL_SCHEMA_DECISIONS_V1.md`
 - `docs/FULL_CROSS_REVIEW_V1.md`
 - `docs/TECHNICAL_SPIKE_PLAN_V1.md`
 - `docs/OPERATING_ENGINE_V1.md`
@@ -113,15 +119,18 @@ Target branch after governance review: `spike/android-foundation-v1`.
 - `docs/ENCRYPTION_SPIKE_CRITERIA.md`
 - `docs/DESIGN_SYSTEM.md`
 
-## Next Planned Work
-1. Mirror Freeze Candidate 2 and spike plan in Notion.
-2. Review/open governance PR status before branch transition.
-3. Close the five remaining physical-schema clarifications or explicitly carry them into spike evidence where appropriate.
-4. Create isolated spike branch.
-5. Execute the technical spike with synthetic data only.
-6. Document every result/failure in GitHub + Notion.
-7. Only if the spike passes: accept exact Flutter/Drift/encryption choices and issue final V1 Domain/Schema Freeze.
-8. Only after final freeze: scaffold the production IBEX 2.0 Android application.
+## Remaining Gates Before Production Scaffold
+1. Execute isolated Android technical spike with synthetic data only.
+2. Validate encrypted SQLite + Android Keystore.
+3. Validate Drift migrations under encryption.
+4. Validate backup/restore round trip.
+5. Validate critical Operating Engine/domain invariants as executable tests.
+6. Validate document sequence, return, and transfer behavior under rollback/retry.
+7. Validate Noto/RTL/Latin-digit UI direction and motion.
+8. Validate thermal printing and barcode baseline.
+9. Validate representative Android performance.
+10. Complete legacy migration reconciliation validation.
+11. Only then issue final V1 Domain/Schema Freeze and scaffold the production IBEX 2.0 application.
 
 ## Resume Protocol
-Use `IBEX2-CONTINUE` in a new conversation, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/FULL_CROSS_REVIEW_V1.md`, `docs/TECHNICAL_SPIKE_PLAN_V1.md`, `docs/DATABASE_SCHEMA_V1.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_TRACEABILITY_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/OWNERSHIP_TRACEABILITY_V1.md`, `docs/DOCUMENT_LIFECYCLE_V1.md`, `docs/DOMAIN_ERROR_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, and active acceptance/posting/inventory artifacts before taking action.
+Use `IBEX2-CONTINUE` in a new conversation, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/PHYSICAL_SCHEMA_DECISIONS_V1.md`, `docs/FULL_CROSS_REVIEW_V1.md`, `docs/TECHNICAL_SPIKE_PLAN_V1.md`, `docs/DATABASE_SCHEMA_V1.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_TRACEABILITY_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/OWNERSHIP_TRACEABILITY_V1.md`, `docs/DOCUMENT_LIFECYCLE_V1.md`, `docs/DOMAIN_ERROR_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, and active acceptance/posting/inventory artifacts before taking action.
