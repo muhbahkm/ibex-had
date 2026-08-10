@@ -1,9 +1,9 @@
 # IBEX 2.0 — Project State
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Current Phase
-**Architecture, V1 schema/domain freeze-candidate review, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
+**Architecture, V1 schema/domain freeze-candidate review, central module ownership definition, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
 
 ## Completed
 - Current legacy repository inspected.
@@ -17,30 +17,19 @@ Last updated: 2026-08-10
 - Risk/open-question registry created in Notion.
 - Project governance, continuity protocol, and design-language rules documented.
 - User-approved visual reference recorded as the design direction for IBEX 2.0.
-- Critical financial/storage decisions accepted for V1:
-  - double-entry accounting core;
-  - moving weighted-average inventory valuation;
-  - scaled-integer money storage with 4-decimal internal scale;
-  - 8-decimal scaled exchange rates;
-  - half-away-from-zero monetary rounding;
-  - realized FX gain/loss on settlement;
-  - posted-document immutability;
-  - negative stock disabled in V1;
-  - encrypted local database requirement.
-- V1 local database schema blueprint written.
-- V1 accounting posting matrix written.
-- V1 inventory movement matrix written.
-- V1 acceptance-test matrix written.
-- V1 backup/restore contract written.
-- V1 encryption spike acceptance criteria written.
+- Critical financial/storage decisions accepted for V1.
+- V1 local database schema blueprint, posting matrix, inventory movement matrix, acceptance-test matrix, backup/restore contract, and encryption spike criteria written.
 - Schema cross-review completed and **Freeze Candidate 1** produced.
-- **ADR-009 accepted: IBEX Operating Engine** is the central authority for operational business logic.
-- V1 Operating Engine architecture documented.
-- Initial V1 state-changing command catalog documented.
+- ADR-009 accepted: **IBEX Operating Engine** is the central authority for operational business logic.
+- V1 Operating Engine architecture and initial state-changing command catalog documented.
+- ADR-010 accepted: **Canonical Domain Modules** — one canonical owner for every recurring business concept/record.
+- ADR-011 accepted: **Reusable Behavior Ownership** — one owner for every repeated business behavior/rule.
+- V1 Central Modules Catalog documented.
+- V1 Reuse & Ownership Rules documented.
 
 ## Current Constraints
 - Production Supabase: **READ ONLY**.
-- GitHub: source of truth for executable code, migrations, schema, tests, domain contracts, and project state.
+- GitHub: source of truth for executable code, migrations, schema, tests, domain contracts, ownership contracts, and project state.
 - Notion: documentation, decisions, planning, execution journal, and traceability.
 - Android first.
 - Arabic RTL first.
@@ -49,29 +38,26 @@ Last updated: 2026-08-10
 - Approved visual direction: soft neutral background, large rounded surfaces, restrained elevation, selective pastel KPI surfaces, thin clean charts, strong active-state accent, generous whitespace, and functional micro-motion.
 - Noto Sans Arabic + Noto Sans are the preferred typography baseline pending implementation validation.
 - No new phase starts until the previous phase gate is satisfied and regressions remain green.
-- No UI, repository, import, sync, automation, or future AI code may bypass the Operating Engine for financial, inventory, settlement, or posted-document truth.
+- No UI, repository, import, sync, automation, report, dashboard, or future AI code may create a competing source of financial, inventory, settlement, document-lifecycle, permission, or canonical-record truth.
 
 ## Central Operating Engine
-The architectural center of IBEX 2.0 is now the **IBEX Operating Engine**, composed of focused domains/services for:
-- sales;
-- purchases;
-- accounting;
-- inventory;
-- settlements;
-- cash/treasury;
-- party balances;
-- document lifecycle;
-- numbering;
-- authorization policy;
-- audit;
-- reversal/correction.
+The architectural center of IBEX 2.0 is the **IBEX Operating Engine**, composed of focused domains/services for sales, purchases, accounting, inventory, settlements, cash/treasury, party balances, document lifecycle, numbering, authorization policy, audit, and reversal/correction.
 
 State-changing behavior is represented as explicit commands such as `PostSale`, `PostPurchase`, `ReceiveCustomerPayment`, `PaySupplier`, `TransferStock`, `RecordExpense`, `ReverseDocument`, and `CloseCashShift`.
 
 This is a coordinated architecture, not one giant file or god-class.
 
+## Canonical module ownership
+IBEX now applies **Single Behavior, Single Source**:
+- canonical records have one domain owner;
+- repeated business behaviors have one behavior owner;
+- canonical value objects have one implementation;
+- presentation may have multiple projections but cannot redefine business truth;
+- technical capabilities are reusable infrastructure and do not decide business validity.
+
+Initial canonical owners include Customer, Supplier, Product, Unit, Warehouse, Sales, Purchases, Accounting, Inventory, Settlement, Cash/Treasury, Currency/FX, Document Lifecycle, Numbering, Authorization, Audit, and Reversal/Correction.
+
 ## Schema Freeze Candidate 1 — Mandatory Additions
-The cross-review made the following mandatory before implementation freeze:
 1. rebuildable `inventory_balances` cache;
 2. explicit `payment_allocations` ledger;
 3. cash-account to accounting-ledger mapping;
@@ -85,13 +71,15 @@ The cross-review made the following mandatory before implementation freeze:
 
 ## Remaining Critical Gates Before Full Scaffold
 1. Update the detailed schema blueprint with every Freeze Candidate 1 addition.
-2. Produce `COMMAND_TRACEABILITY_V1.md` mapping every state-changing command to permissions, tables, accounting effects, stock effects, audit, reversal, and acceptance scenarios.
-3. Produce a document-state transition matrix and domain error catalog.
-4. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
-5. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
-6. Review future-safe tax metadata without enabling tax behavior.
-7. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
-8. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
+2. Produce `COMMAND_TRACEABILITY_V1.md` mapping every state-changing command to permissions, owner modules, tables, accounting effects, stock effects, audit, reversal, and acceptance scenarios.
+3. Produce a canonical-record ownership matrix mapping each table/model/query projection to its owner module.
+4. Produce a document-state transition matrix and domain error catalog.
+5. Cross-review every repeated behavior for duplicate ownership or UI-owned business logic.
+6. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
+7. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
+8. Review future-safe tax metadata without enabling tax behavior.
+9. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
+10. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
 
 ## Current Design Artifacts
 - `docs/SCHEMA_DECISIONS_V1.md`
@@ -99,6 +87,8 @@ The cross-review made the following mandatory before implementation freeze:
 - `docs/SCHEMA_CROSS_REVIEW_V1.md`
 - `docs/OPERATING_ENGINE_V1.md`
 - `docs/COMMAND_CATALOG_V1.md`
+- `docs/CENTRAL_MODULES_CATALOG_V1.md`
+- `docs/REUSE_OWNERSHIP_RULES_V1.md`
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
@@ -108,14 +98,15 @@ The cross-review made the following mandatory before implementation freeze:
 
 ## Next Planned Work
 1. Update `DATABASE_SCHEMA_V1.md` to incorporate all Freeze Candidate 1 changes.
-2. Produce command-to-schema/accounting/inventory/permission traceability.
-3. Produce document lifecycle/state-transition and domain-error contracts.
-4. Cross-review all commands against schema, posting matrix, inventory movement matrix, and acceptance tests.
-5. Produce the technical-spike implementation plan.
-6. Create an isolated spike branch only after documentation is internally consistent.
-7. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
-8. Validate printing/barcode constraints.
-9. Review spike evidence and only then freeze the V1 schema/domain contracts and scaffold the full application.
+2. Produce command-to-owner/schema/accounting/inventory/permission traceability.
+3. Produce canonical-record ownership and query-projection mapping.
+4. Produce document lifecycle/state-transition and domain-error contracts.
+5. Cross-review all commands and owner modules against schema, posting matrix, inventory movement matrix, and acceptance tests.
+6. Produce the technical-spike implementation plan.
+7. Create an isolated spike branch only after documentation is internally consistent.
+8. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
+9. Validate printing/barcode constraints.
+10. Review spike evidence and only then freeze the V1 schema/domain/ownership contracts and scaffold the full application.
 
 ## Resume Protocol
-If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, `docs/SCHEMA_CROSS_REVIEW_V1.md`, and the active schema/acceptance artifacts before taking action.
+If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_CATALOG_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/REUSE_OWNERSHIP_RULES_V1.md`, `docs/DESIGN_SYSTEM.md`, `docs/SCHEMA_CROSS_REVIEW_V1.md`, and the active schema/acceptance artifacts before taking action.
