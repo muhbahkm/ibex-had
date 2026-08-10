@@ -28,6 +28,11 @@ This file is the repository-side index of architectural and product decisions. D
 - ADR-011 — **Reusable Behavior Ownership:** every repeated business rule, calculation, validation, state transition, permission decision, numbering rule, stock rule, settlement rule, or formatting contract has exactly one owner module.
 - Shared presentation components may reuse interaction/visual patterns, but domain policy may not be hidden inside shared widgets.
 - Import, sync, automation, reports, dashboards, and future AI must consume the same canonical domain/application contracts rather than reimplementing business logic.
+- ADR-012 — **Dedicated immutable return documents:** sales and purchase returns use dedicated return header/item tables linked to the original document and original lines; posting creates compensating effects and never edits posted source truth.
+- ADR-013 — **Warehouse transfer document + paired movements:** one `stock_transfers` document creates one source `TRANSFER_OUT` movement and one destination `TRANSFER_IN` movement atomically, carrying the same inventory value.
+- ADR-014 — **Tax-ready but tax-disabled V1:** store only future-safe tax registration and posted snapshot metadata; while tax is disabled all tax amounts remain zero and no jurisdiction-specific tax engine runs.
+- ADR-015 — **Fixed quantity scale:** canonical quantities and conversion factors use signed 64-bit scaled integers at scale 1e6; unit metadata controls allowed/display precision from 0 to 6 decimals.
+- ADR-016 — **Application-owned document numbering:** visible document numbers come from transactional `document_sequences` scoped by business/document type/year, while UUID remains canonical identity. SQLite row IDs/AUTOINCREMENT are not business document numbers.
 
 ## Proposed / Pending Implementation Validation
 - ADR-002 — Flutter as primary client platform.
@@ -38,20 +43,26 @@ This file is the repository-side index of architectural and product decisions. D
 
 ## V1 Architecture / Schema Design References
 - `docs/SCHEMA_DECISIONS_V1.md`
+- `docs/PHYSICAL_SCHEMA_DECISIONS_V1.md`
 - `docs/DATABASE_SCHEMA_V1.md`
 - `docs/OPERATING_ENGINE_V1.md`
 - `docs/COMMAND_CATALOG_V1.md`
+- `docs/COMMAND_TRACEABILITY_V1.md`
 - `docs/CENTRAL_MODULES_CATALOG_V1.md`
 - `docs/REUSE_OWNERSHIP_RULES_V1.md`
+- `docs/OWNERSHIP_TRACEABILITY_V1.md`
+- `docs/DOCUMENT_LIFECYCLE_V1.md`
+- `docs/DOMAIN_ERROR_CATALOG_V1.md`
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
 
 ## Remaining Gates Before Schema / Domain Freeze
-- Complete command-to-schema/accounting/inventory/permission traceability.
-- Complete command-to-owner-module traceability.
 - Validate encrypted SQLite spike on representative Android devices.
+- Validate Drift migrations against the encrypted database.
+- Validate backup/restore round trip.
 - Validate thermal printer and barcode hardware strategy.
-- Review tax-ready fields for future-safe compatibility.
-- Complete legacy migration mapping and reconciliation rules.
-- Perform structured review of the V1 schema blueprint against every acceptance scenario and Operating Engine command.
+- Complete legacy migration mapping and reconciliation validation.
+- Validate the accepted schema/domain contracts with executable critical-path tests.
+
+The five former physical-schema clarifications (returns, transfers, tax-ready metadata, quantity precision, document numbering) are closed for V1 by ADR-012 through ADR-016.
