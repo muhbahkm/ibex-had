@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -11,14 +12,21 @@ import '../database/spike_database.dart';
 import 'document_sequence_service.dart';
 import 'post_sale_command.dart';
 
+typedef SpikeFailureInjector = FutureOr<void> Function(String point);
+
 class PostSaleService {
-  PostSaleService(this.db, {Uuid? uuid})
-      : _uuid = uuid ?? const Uuid(),
-        _sequence = DocumentSequenceService(db);
+  PostSaleService(
+    this.db, {
+    Uuid? uuid,
+    SpikeFailureInjector? failureInjector,
+  })  : _uuid = uuid ?? const Uuid(),
+        _sequence = DocumentSequenceService(db),
+        _failureInjector = failureInjector;
 
   final SpikeDatabase db;
   final Uuid _uuid;
   final DocumentSequenceService _sequence;
+  final SpikeFailureInjector? _failureInjector;
 
   Future<PostSaleResult> execute(PostSaleCommand command) async {
     if (command.lines.isEmpty) {
@@ -27,6 +35,9 @@ class PostSaleService {
     if (command.exchangeRateScaled <= 0) {
       throw const DomainError('FX_RATE_INVALID', 'Exchange rate must be positive.');
     }
+
+    final currency = _normalizeCurrency(command.currencyCode, 'MONEY_CURRENCY_INVALID');
+    final baseCurrency = _normalizeCurrency(command.baseCurrencyCode, 'BASE_CURRENCY_INVALID');
 
     return db.transaction(() async {
       final existingOperation = await (db.select(db.operationLog)
@@ -61,17 +72,14 @@ class PostSaleService {
       final movementId = _uuid.v4();
       final paymentId = _uuid.v4();
       final now = DateTime.now().toUtc();
-      final currency = command.currencyCode.trim().toUpperCase();
+
       final rate = ExchangeRate.fromScaled(
         scaled: command.exchangeRateScaled,
         fromCurrency: currency,
-        toCurrency: 'YER',
+        toCurrency: baseCurrency,
       );
 
-      var saleTotalScaled = 0;
-      var cogsTotalScaled = 0;
-      final lineSnapshots = <_LineSnapshot>[];
-
+      final requiredByProduct = <String, int>{};
       for (final line in command.lines) {
         if (line.quantityScaled <= 0) {
           throw const DomainError('SALE_QTY_INVALID', 'Sale quantity must be positive.');
@@ -79,17 +87,31 @@ class PostSaleService {
         if (line.unitPriceScaled < 0) {
           throw const DomainError('SALE_PRICE_INVALID', 'Sale price cannot be negative.');
         }
+        requiredByProduct.update(
+          line.productId,
+          (current) => checkedInt64(current + line.quantityScaled),
+          ifAbsent: () => checkedInt64(line.quantityScaled),
+        );
+      }
 
+      final balancesByProduct = <String, InventoryBalance>{};
+      for (final entry in requiredByProduct.entries) {
         final balance = await (db.select(db.inventoryBalances)
               ..where((t) =>
                   t.warehouseId.equals(command.warehouseId) &
-                  t.productId.equals(line.productId)))
+                  t.productId.equals(entry.key)))
             .getSingleOrNull();
-
-        if (balance == null || balance.quantityScaled < line.quantityScaled) {
+        if (balance == null || balance.quantityScaled < entry.value) {
           throw const DomainError('INV_INSUFFICIENT_STOCK', 'Insufficient stock for sale posting.');
         }
+        balancesByProduct[entry.key] = balance;
+      }
 
+      var saleTotalScaled = 0;
+      var cogsTotalScaled = 0;
+      final lineSnapshots = <_LineSnapshot>[];
+      for (final line in command.lines) {
+        final balance = balancesByProduct[line.productId]!;
         final lineNet = divideHalfAwayFromZero(
           line.quantityScaled * line.unitPriceScaled,
           1000000,
@@ -98,7 +120,6 @@ class PostSaleService {
           line.quantityScaled * balance.wacUnitCostScaled,
           1000000,
         );
-
         saleTotalScaled = checkedInt64(saleTotalScaled + lineNet);
         cogsTotalScaled = checkedInt64(cogsTotalScaled + lineCogs);
         lineSnapshots.add(
@@ -107,22 +128,23 @@ class PostSaleService {
             netScaled: lineNet,
             cogsUnitCostScaled: balance.wacUnitCostScaled,
             cogsTotalScaled: lineCogs,
-            oldBalanceQty: balance.quantityScaled,
-            oldBalanceValue: balance.inventoryValueScaled,
           ),
         );
       }
 
       final saleMoney = Money.fromScaled(saleTotalScaled, currency);
-      final baseSaleMoney = rate.convert(saleMoney);
+      final baseSaleMoney = currency == baseCurrency
+          ? Money.fromScaled(saleTotalScaled, baseCurrency)
+          : rate.convert(saleMoney);
       final baseCogsScaled = cogsTotalScaled;
 
       final documentNo = await _sequence.nextNumber(
         businessId: command.businessId,
         documentType: 'sale',
-        year: command.saleAt.toLocal().year,
+        year: command.saleAt.toUtc().year,
         prefix: 'SAL',
       );
+      await _failAt('after_sequence');
 
       await db.into(db.sales).insert(
             SalesCompanion.insert(
@@ -157,10 +179,9 @@ class PostSaleService {
           );
 
       for (final snapshot in lineSnapshots) {
-        final saleItemId = _uuid.v4();
         await db.into(db.saleItems).insert(
               SaleItemsCompanion.insert(
-                id: saleItemId,
+                id: _uuid.v4(),
                 saleId: saleId,
                 productId: snapshot.input.productId,
                 quantityScaled: snapshot.input.quantityScaled,
@@ -181,13 +202,20 @@ class PostSaleService {
                 totalCostScaled: -snapshot.cogsTotalScaled,
               ),
             );
+      }
 
-        final newQty = checkedInt64(snapshot.oldBalanceQty - snapshot.input.quantityScaled);
-        final newValue = checkedInt64(snapshot.oldBalanceValue - snapshot.cogsTotalScaled);
+      var inventoryWrites = 0;
+      for (final entry in requiredByProduct.entries) {
+        final balance = balancesByProduct[entry.key]!;
+        final totalCogsForProduct = lineSnapshots
+            .where((s) => s.input.productId == entry.key)
+            .fold<int>(0, (sum, s) => checkedInt64(sum + s.cogsTotalScaled));
+        final newQty = checkedInt64(balance.quantityScaled - entry.value);
+        final newValue = checkedInt64(balance.inventoryValueScaled - totalCogsForProduct);
         await (db.update(db.inventoryBalances)
               ..where((t) =>
                   t.warehouseId.equals(command.warehouseId) &
-                  t.productId.equals(snapshot.input.productId)))
+                  t.productId.equals(entry.key)))
             .write(
           InventoryBalancesCompanion(
             quantityScaled: Value(newQty),
@@ -195,6 +223,8 @@ class PostSaleService {
             updatedAt: Value(now),
           ),
         );
+        inventoryWrites++;
+        if (inventoryWrites == 1) await _failAt('after_first_inventory_write');
       }
 
       await db.into(db.journalEntries).insert(
@@ -243,8 +273,14 @@ class PostSaleService {
         await db.into(db.journalLines).insert(line);
       }
 
-      final debit = baseSaleMoney.scaled + baseCogsScaled;
-      final credit = baseSaleMoney.scaled + baseCogsScaled;
+      final debit = journalLines.fold<int>(0, (sum, line) {
+        final value = line.baseDebitScaled.present ? line.baseDebitScaled.value : 0;
+        return checkedInt64(sum + value);
+      });
+      final credit = journalLines.fold<int>(0, (sum, line) {
+        final value = line.baseCreditScaled.present ? line.baseCreditScaled.value : 0;
+        return checkedInt64(sum + value);
+      });
       if (debit != credit) {
         throw const DomainError('ACC_ENTRY_UNBALANCED', 'Journal entry is not balanced.');
       }
@@ -289,9 +325,13 @@ class PostSaleService {
                 'document_no': documentNo,
                 'line_count': command.lines.length,
                 'total_scaled': saleTotalScaled,
+                'currency': currency,
+                'base_currency': baseCurrency,
               }),
             ),
           );
+
+      await _failAt('before_commit');
 
       return PostSaleResult(
         saleId: saleId,
@@ -303,6 +343,19 @@ class PostSaleService {
       );
     });
   }
+
+  Future<void> _failAt(String point) async {
+    final injector = _failureInjector;
+    if (injector != null) await injector(point);
+  }
+
+  String _normalizeCurrency(String value, String code) {
+    final normalized = value.trim().toUpperCase();
+    if (!RegExp(r'^[A-Z]{3}$').hasMatch(normalized)) {
+      throw DomainError(code, 'Currency code must be 3 Latin letters.');
+    }
+    return normalized;
+  }
 }
 
 class _LineSnapshot {
@@ -311,14 +364,10 @@ class _LineSnapshot {
     required this.netScaled,
     required this.cogsUnitCostScaled,
     required this.cogsTotalScaled,
-    required this.oldBalanceQty,
-    required this.oldBalanceValue,
   });
 
   final PostSaleLineInput input;
   final int netScaled;
   final int cogsUnitCostScaled;
   final int cogsTotalScaled;
-  final int oldBalanceQty;
-  final int oldBalanceValue;
 }
