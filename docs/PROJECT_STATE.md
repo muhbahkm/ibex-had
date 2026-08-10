@@ -3,86 +3,101 @@
 Last updated: 2026-08-11
 
 ## Current Phase
-**Architecture, V1 schema/domain freeze-candidate review, central ownership/traceability definition, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
+**V1 Domain/Schema Freeze Candidate 2 and isolated technical-spike readiness. No production IBEX 2.0 application scaffold has been started yet.**
 
 ## Completed
-- Current legacy repository inspected.
-- Legacy production Supabase project identified as `IBEX_26`.
-- Existing schema and security posture reviewed in read-only mode.
-- Production Supabase redesign boundary fixed as READ ONLY.
-- Notion Product & Engineering Hub created.
-- Product vision, architecture, database, accounting, inventory, POS, security, backup, sync, migration, testing, and roadmap areas created.
-- Feature registry, architecture decision registry, and risk/open-question registry created in Notion.
-- Project governance, continuity protocol, and design-language rules documented.
-- User-approved visual reference recorded as the design direction for IBEX 2.0.
-- Critical financial/storage decisions accepted for V1.
-- V1 local database schema blueprint, posting matrix, inventory movement matrix, acceptance-test matrix, backup/restore contract, and encryption spike criteria written.
-- Schema cross-review completed and **Freeze Candidate 1** produced.
-- ADR-009 accepted: **IBEX Operating Engine** is the central authority for operational business logic.
-- V1 Operating Engine architecture and initial state-changing command catalog documented.
-- ADR-010 accepted: **Canonical Domain Modules** — one canonical owner for every recurring business concept/record.
-- ADR-011 accepted: **Reusable Behavior Ownership** — one owner for every repeated business behavior/rule.
-- V1 Central Modules Catalog and Reuse & Ownership Rules documented.
-- V1 Command Traceability Matrix completed.
-- V1 Ownership & Traceability Matrix completed.
-- V1 Document Lifecycle & State Transition Contract completed.
-- V1 Domain Error Catalog completed.
+- Legacy repository inspected and production Supabase project `IBEX_26` identified.
+- Production Supabase redesign boundary fixed as **READ ONLY**.
+- GitHub established as source of truth for code/schema/tests/contracts/project state.
+- Notion established as documentation/decision/planning/execution ledger.
+- Product vision, architecture, database, accounting, inventory, POS, security, backup, sync, migration, testing, roadmap, design, and continuity areas documented.
+- Approved visual direction recorded: calm, premium, minimal, generous whitespace, restrained motion, Arabic RTL, Latin digits only, Noto typography baseline.
+- ADR-009 accepted: **IBEX Operating Engine** centralizes operational business logic.
+- ADR-010 accepted: **Canonical Domain Modules**.
+- ADR-011 accepted: **Reusable Behavior Ownership**.
+- Central Modules Catalog and Reuse/Ownership Rules documented.
+- Command Traceability Matrix completed.
+- Ownership & Traceability Matrix completed.
+- Document Lifecycle Contract completed.
+- Domain Error Catalog completed.
+- Database schema updated to **Freeze Candidate 2**.
+- Full Architecture Cross-Review completed.
+- Technical Spike Plan V1 completed.
 
 ## Current Constraints
 - Production Supabase: **READ ONLY**.
-- GitHub: source of truth for executable code, migrations, schema, tests, domain contracts, ownership contracts, and project state.
-- Notion: documentation, decisions, planning, execution journal, and traceability.
 - Android first.
+- Local-first runtime.
 - Arabic RTL first.
 - Latin digits only (`0-9`).
-- Calm, premium, minimal visual system.
-- Approved visual direction: soft neutral background, large rounded surfaces, restrained elevation, selective pastel KPI surfaces, thin clean charts, strong active-state accent, generous whitespace, and functional micro-motion.
-- Noto Sans Arabic + Noto Sans are the preferred typography baseline pending implementation validation.
-- No new phase starts until the previous phase gate is satisfied and regressions remain green.
-- No UI, repository, import, sync, automation, report, dashboard, or future AI code may create a competing source of financial, inventory, settlement, document-lifecycle, permission, or canonical-record truth.
+- Calm/premium/minimal design language.
+- Noto Sans Arabic + Noto Sans baseline pending device validation.
+- No UI, report, dashboard, import, sync, automation, repository adapter, or future AI component may create competing financial/inventory/settlement/document-lifecycle/permission truth.
+- No new phase advances unless previous phase gates and regression checks pass.
 
-## Central Operating Engine
-The architectural center of IBEX 2.0 is the **IBEX Operating Engine**, composed of focused domains/services for sales, purchases, accounting, inventory, settlements, cash/treasury, party balances, document lifecycle, numbering, authorization policy, audit, and reversal/correction.
+## Accepted Core Invariants
+- Double-entry accounting.
+- Moving Weighted Average inventory valuation.
+- Money stored as signed Int64 scaled by 10,000.
+- FX rates scaled by 100,000,000.
+- Half-away-from-zero rounding.
+- Posted documents immutable.
+- Reversal/correction through linked compensating records.
+- Negative stock blocked for V1 posting.
+- Inventory balances are rebuildable projections from stock movements.
+- Payment allocations are explicit.
+- Cash accounts map to ledger accounts.
+- Transaction/base-currency snapshots freeze at posting.
+- Operation IDs provide idempotency/correlation basis.
+- Audit is append-only by application contract.
+- Document numbering has one transactional canonical owner.
 
-State-changing behavior is represented as explicit commands such as `PostSale`, `PostPurchase`, `ReceiveCustomerPayment`, `PaySupplier`, `TransferStock`, `RecordExpense`, `ReverseDocument`, and `CloseCashShift`.
+## Freeze Candidate 2 Additions Now Incorporated
+- `document_sequences`.
+- `operation_log`.
+- explicit base-currency snapshot fields.
+- commercial-document links to journal entries and stock movements.
+- explicit reversal/return source links.
+- sale-line COGS snapshots.
+- purchase receipt-cost snapshots.
+- explicit `payment_allocations` settlement ledger.
+- mandatory cash-account -> ledger-account mapping.
+- append-only audit contract with operation correlation.
+- legacy import run/mapping/reconciliation support.
 
-This is a coordinated architecture, not one giant file or god-class.
+## Full Cross-Review Result
+No architecture-blocking contradiction remains in the current V1 direction. Remaining items are controlled implementation/physical-schema validation gates:
+1. final physical representation of sales/purchase returns;
+2. exact stock-transfer physical representation across two warehouses;
+3. exact tax-ready metadata fields while tax behavior remains disabled;
+4. exact quantity precision policy by unit category;
+5. document prefix/fiscal sequencing conventions;
+6. encrypted SQLite + Android Keystore implementation validation;
+7. thermal printer and barcode viability;
+8. UI direction validation on representative Android targets.
 
-## Canonical module ownership
-IBEX applies **Single Behavior, Single Source**:
-- canonical records have one domain owner;
-- repeated business behaviors have one behavior owner;
-- canonical value objects have one implementation;
-- presentation may have multiple projections but cannot redefine business truth;
-- technical capabilities are reusable infrastructure and do not decide business validity.
+## Technical Spike
+The next executable work is an isolated disposable spike, not the production scaffold.
 
-## Schema Freeze Candidate 1 — Mandatory Additions
-1. rebuildable `inventory_balances` cache;
-2. explicit `payment_allocations` ledger;
-3. cash-account to accounting-ledger mapping;
-4. line-level original COGS retention on sales;
-5. line-level receipt-cost retention on purchases;
-6. explicit reversal/return source links;
-7. transactional local document sequence table;
-8. migration mapping/reconciliation tables for legacy import tooling;
-9. append-only audit-log scope;
-10. transaction/base-currency snapshots on posted financial records.
+Planned validation:
+- Flutter Android;
+- Drift + SQLite;
+- encrypted SQLite candidate;
+- Android Keystore key protection;
+- encrypted migration + backup/restore;
+- Money/Quantity/FX value objects;
+- minimal local `PostSale` vertical slice proving authorization, stock validation, sale + journal + stock + payment/allocation + audit under one transaction and rollback;
+- Noto + RTL + Latin digits + approved motion/design language;
+- barcode baseline;
+- 58mm/80mm thermal print baseline;
+- performance evidence.
 
-## Remaining Critical Gates Before Full Scaffold
-1. Update the detailed schema blueprint with every Freeze Candidate 1 addition and ownership mapping.
-2. Cross-review every command against schema, accounting, inventory, lifecycle, domain errors, permissions, audit, and acceptance tests.
-3. Resolve any inconsistencies found by that cross-review.
-4. Produce the technical-spike implementation plan.
-5. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
-6. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
-7. Review future-safe tax metadata without enabling tax behavior.
-8. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
-9. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
+Target branch after governance review: `spike/android-foundation-v1`.
 
 ## Current Design Artifacts
-- `docs/SCHEMA_DECISIONS_V1.md`
 - `docs/DATABASE_SCHEMA_V1.md`
-- `docs/SCHEMA_CROSS_REVIEW_V1.md`
+- `docs/FULL_CROSS_REVIEW_V1.md`
+- `docs/TECHNICAL_SPIKE_PLAN_V1.md`
 - `docs/OPERATING_ENGINE_V1.md`
 - `docs/COMMAND_CATALOG_V1.md`
 - `docs/COMMAND_TRACEABILITY_V1.md`
@@ -99,13 +114,14 @@ IBEX applies **Single Behavior, Single Source**:
 - `docs/DESIGN_SYSTEM.md`
 
 ## Next Planned Work
-1. Update `DATABASE_SCHEMA_V1.md` to match Freeze Candidate 1, lifecycle, error, and ownership contracts.
-2. Perform the first full command/schema/owner/acceptance cross-review and publish findings.
-3. Produce the technical-spike implementation plan and dependency-validation checklist.
-4. Create an isolated spike branch only after documentation is internally consistent.
-5. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
-6. Validate printing/barcode constraints.
-7. Review spike evidence and only then freeze the V1 schema/domain/ownership contracts and scaffold the full application.
+1. Mirror Freeze Candidate 2 and spike plan in Notion.
+2. Review/open governance PR status before branch transition.
+3. Close the five remaining physical-schema clarifications or explicitly carry them into spike evidence where appropriate.
+4. Create isolated spike branch.
+5. Execute the technical spike with synthetic data only.
+6. Document every result/failure in GitHub + Notion.
+7. Only if the spike passes: accept exact Flutter/Drift/encryption choices and issue final V1 Domain/Schema Freeze.
+8. Only after final freeze: scaffold the production IBEX 2.0 Android application.
 
 ## Resume Protocol
-If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_CATALOG_V1.md`, `docs/COMMAND_TRACEABILITY_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/OWNERSHIP_TRACEABILITY_V1.md`, `docs/DOCUMENT_LIFECYCLE_V1.md`, `docs/DOMAIN_ERROR_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, and the active schema/acceptance artifacts before taking action.
+Use `IBEX2-CONTINUE` in a new conversation, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/FULL_CROSS_REVIEW_V1.md`, `docs/TECHNICAL_SPIKE_PLAN_V1.md`, `docs/DATABASE_SCHEMA_V1.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_TRACEABILITY_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/OWNERSHIP_TRACEABILITY_V1.md`, `docs/DOCUMENT_LIFECYCLE_V1.md`, `docs/DOMAIN_ERROR_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, and active acceptance/posting/inventory artifacts before taking action.
