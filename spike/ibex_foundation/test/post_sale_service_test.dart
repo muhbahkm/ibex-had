@@ -25,28 +25,36 @@ void main() {
 
   tearDown(() => db.close());
 
-  PostSaleCommand command({String operationId = 'op-sale-1', int qty = 2 * 1000000}) {
+  PostSaleCommand command({
+    String operationId = 'op-sale-1',
+    int qty = 2 * 1000000,
+    String currencyCode = 'YER',
+    String baseCurrencyCode = 'YER',
+    int exchangeRateScaled = 100000000,
+    List<PostSaleLineInput>? lines,
+  }) {
     return PostSaleCommand(
       operationId: operationId,
       businessId: 'B-1',
       userId: 'U-1',
       warehouseId: 'WH-1',
-      currencyCode: 'YER',
-      baseCurrencyCode: 'YER',
-      exchangeRateScaled: 100000000,
+      currencyCode: currencyCode,
+      baseCurrencyCode: baseCurrencyCode,
+      exchangeRateScaled: exchangeRateScaled,
       cashAccountId: 'CASH-1',
       cashLedgerAccountId: 'ACC-CASH',
       salesRevenueAccountId: 'ACC-SALES',
       inventoryLedgerAccountId: 'ACC-INV',
       cogsLedgerAccountId: 'ACC-COGS',
       saleAt: DateTime.utc(2026, 8, 11, 10),
-      lines: [
-        PostSaleLineInput(
-          productId: 'P-1',
-          quantityScaled: qty,
-          unitPriceScaled: 80 * 10000,
-        ),
-      ],
+      lines: lines ??
+          [
+            PostSaleLineInput(
+              productId: 'P-1',
+              quantityScaled: qty,
+              unitPriceScaled: 80 * 10000,
+            ),
+          ],
     );
   }
 
@@ -91,15 +99,141 @@ void main() {
       throwsA(predicate((e) => e.toString().contains('INV_INSUFFICIENT_STOCK'))),
     );
 
-    expect(await db.select(db.sales).get(), isEmpty);
-    expect(await db.select(db.stockMovements).get(), isEmpty);
-    expect(await db.select(db.journalEntries).get(), isEmpty);
-    expect(await db.select(db.payments).get(), isEmpty);
-    expect(await db.select(db.operationLog).get(), isEmpty);
-    expect(await db.select(db.auditLogs).get(), isEmpty);
-
+    await _expectNoPostedTruth(db);
     final balance = await db.select(db.inventoryBalances).getSingle();
     expect(balance.quantityScaled, 10 * 1000000);
     expect(balance.inventoryValueScaled, 500 * 10000);
   });
+
+  test('duplicate product lines are aggregated before stock validation', () async {
+    final duplicateLines = [
+      const PostSaleLineInput(
+        productId: 'P-1',
+        quantityScaled: 6 * 1000000,
+        unitPriceScaled: 80 * 10000,
+      ),
+      const PostSaleLineInput(
+        productId: 'P-1',
+        quantityScaled: 5 * 1000000,
+        unitPriceScaled: 80 * 10000,
+      ),
+    ];
+
+    await expectLater(
+      service.execute(command(operationId: 'op-duplicate-overdraw', lines: duplicateLines)),
+      throwsA(predicate((e) => e.toString().contains('INV_INSUFFICIENT_STOCK'))),
+    );
+
+    await _expectNoPostedTruth(db);
+    final balance = await db.select(db.inventoryBalances).getSingle();
+    expect(balance.quantityScaled, 10 * 1000000);
+  });
+
+  test('duplicate product lines within available stock update balance once correctly', () async {
+    final result = await service.execute(
+      command(
+        operationId: 'op-duplicate-valid',
+        lines: const [
+          PostSaleLineInput(
+            productId: 'P-1',
+            quantityScaled: 2 * 1000000,
+            unitPriceScaled: 80 * 10000,
+          ),
+          PostSaleLineInput(
+            productId: 'P-1',
+            quantityScaled: 3 * 1000000,
+            unitPriceScaled: 85 * 10000,
+          ),
+        ],
+      ),
+    );
+
+    expect(result.documentNo, 'SAL-2026-000001');
+    expect((await db.select(db.saleItems).get()).length, 2);
+    expect((await db.select(db.stockMovementItems).get()).length, 2);
+    final balance = await db.select(db.inventoryBalances).getSingle();
+    expect(balance.quantityScaled, 5 * 1000000);
+    expect(balance.inventoryValueScaled, 250 * 10000);
+  });
+
+  test('base currency is command-owned and not hard-coded to YER', () async {
+    await service.execute(
+      command(
+        operationId: 'op-sar-base',
+        currencyCode: 'USD',
+        baseCurrencyCode: 'SAR',
+        exchangeRateScaled: 375000000,
+      ),
+    );
+
+    final sale = await db.select(db.sales).getSingle();
+    expect(sale.totalScaled, 160 * 10000);
+    expect(sale.baseTotalScaled, 600 * 10000);
+  });
+
+  test('failure after document sequence rolls sequence and all truth back', () async {
+    service = PostSaleService(
+      db,
+      failureInjector: (point) {
+        if (point == 'after_sequence') throw StateError('injected failure');
+      },
+    );
+
+    await expectLater(service.execute(command(operationId: 'op-sequence-fail')), throwsStateError);
+
+    await _expectNoPostedTruth(db);
+    expect(await db.select(db.documentSequences).get(), isEmpty);
+
+    service = PostSaleService(db);
+    final recovered = await service.execute(command(operationId: 'op-sequence-retry'));
+    expect(recovered.documentNo, 'SAL-2026-000001');
+  });
+
+  test('failure after inventory write rolls stock, sequence and partial records back', () async {
+    service = PostSaleService(
+      db,
+      failureInjector: (point) {
+        if (point == 'after_first_inventory_write') {
+          throw StateError('injected inventory failure');
+        }
+      },
+    );
+
+    await expectLater(service.execute(command(operationId: 'op-inventory-fail')), throwsStateError);
+
+    await _expectNoPostedTruth(db);
+    expect(await db.select(db.documentSequences).get(), isEmpty);
+    final balance = await db.select(db.inventoryBalances).getSingle();
+    expect(balance.quantityScaled, 10 * 1000000);
+    expect(balance.inventoryValueScaled, 500 * 10000);
+  });
+
+  test('failure immediately before commit rolls every persisted effect back', () async {
+    service = PostSaleService(
+      db,
+      failureInjector: (point) {
+        if (point == 'before_commit') throw StateError('injected commit failure');
+      },
+    );
+
+    await expectLater(service.execute(command(operationId: 'op-before-commit-fail')), throwsStateError);
+
+    await _expectNoPostedTruth(db);
+    expect(await db.select(db.documentSequences).get(), isEmpty);
+    final balance = await db.select(db.inventoryBalances).getSingle();
+    expect(balance.quantityScaled, 10 * 1000000);
+    expect(balance.inventoryValueScaled, 500 * 10000);
+  });
+}
+
+Future<void> _expectNoPostedTruth(SpikeDatabase db) async {
+  expect(await db.select(db.sales).get(), isEmpty);
+  expect(await db.select(db.saleItems).get(), isEmpty);
+  expect(await db.select(db.stockMovements).get(), isEmpty);
+  expect(await db.select(db.stockMovementItems).get(), isEmpty);
+  expect(await db.select(db.journalEntries).get(), isEmpty);
+  expect(await db.select(db.journalLines).get(), isEmpty);
+  expect(await db.select(db.payments).get(), isEmpty);
+  expect(await db.select(db.operationLog).get(), isEmpty);
+  expect(await db.select(db.auditLogs).get(), isEmpty);
 }
