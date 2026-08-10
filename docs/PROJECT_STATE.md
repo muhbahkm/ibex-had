@@ -3,7 +3,7 @@
 Last updated: 2026-08-10
 
 ## Current Phase
-**Architecture, V1 schema freeze-candidate review, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
+**Architecture, V1 schema/domain freeze-candidate review, and technical-spike preparation. No IBEX 2.0 application code has been started yet.**
 
 ## Completed
 - Current legacy repository inspected.
@@ -34,10 +34,13 @@ Last updated: 2026-08-10
 - V1 backup/restore contract written.
 - V1 encryption spike acceptance criteria written.
 - Schema cross-review completed and **Freeze Candidate 1** produced.
+- **ADR-009 accepted: IBEX Operating Engine** is the central authority for operational business logic.
+- V1 Operating Engine architecture documented.
+- Initial V1 state-changing command catalog documented.
 
 ## Current Constraints
 - Production Supabase: **READ ONLY**.
-- GitHub: source of truth for executable code, migrations, schema, tests, and project state.
+- GitHub: source of truth for executable code, migrations, schema, tests, domain contracts, and project state.
 - Notion: documentation, decisions, planning, execution journal, and traceability.
 - Android first.
 - Arabic RTL first.
@@ -46,6 +49,26 @@ Last updated: 2026-08-10
 - Approved visual direction: soft neutral background, large rounded surfaces, restrained elevation, selective pastel KPI surfaces, thin clean charts, strong active-state accent, generous whitespace, and functional micro-motion.
 - Noto Sans Arabic + Noto Sans are the preferred typography baseline pending implementation validation.
 - No new phase starts until the previous phase gate is satisfied and regressions remain green.
+- No UI, repository, import, sync, automation, or future AI code may bypass the Operating Engine for financial, inventory, settlement, or posted-document truth.
+
+## Central Operating Engine
+The architectural center of IBEX 2.0 is now the **IBEX Operating Engine**, composed of focused domains/services for:
+- sales;
+- purchases;
+- accounting;
+- inventory;
+- settlements;
+- cash/treasury;
+- party balances;
+- document lifecycle;
+- numbering;
+- authorization policy;
+- audit;
+- reversal/correction.
+
+State-changing behavior is represented as explicit commands such as `PostSale`, `PostPurchase`, `ReceiveCustomerPayment`, `PaySupplier`, `TransferStock`, `RecordExpense`, `ReverseDocument`, and `CloseCashShift`.
+
+This is a coordinated architecture, not one giant file or god-class.
 
 ## Schema Freeze Candidate 1 — Mandatory Additions
 The cross-review made the following mandatory before implementation freeze:
@@ -62,17 +85,20 @@ The cross-review made the following mandatory before implementation freeze:
 
 ## Remaining Critical Gates Before Full Scaffold
 1. Update the detailed schema blueprint with every Freeze Candidate 1 addition.
-2. Map acceptance scenarios to concrete tables/services and invariants.
-3. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
-4. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
-5. Review future-safe tax metadata without enabling tax behavior.
-6. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
-7. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
+2. Produce `COMMAND_TRACEABILITY_V1.md` mapping every state-changing command to permissions, tables, accounting effects, stock effects, audit, reversal, and acceptance scenarios.
+3. Produce a document-state transition matrix and domain error catalog.
+4. Validate encrypted SQLite implementation and Android Keystore strategy with a technical spike.
+5. Validate Flutter thermal printer and barcode hardware compatibility on representative targets.
+6. Review future-safe tax metadata without enabling tax behavior.
+7. Complete detailed legacy-to-V2 migration mapping and reconciliation rules.
+8. Validate the approved UI direction, Noto typography, RTL, Latin-digit formatting, and motion in the technical spike.
 
 ## Current Design Artifacts
 - `docs/SCHEMA_DECISIONS_V1.md`
 - `docs/DATABASE_SCHEMA_V1.md`
 - `docs/SCHEMA_CROSS_REVIEW_V1.md`
+- `docs/OPERATING_ENGINE_V1.md`
+- `docs/COMMAND_CATALOG_V1.md`
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
@@ -82,12 +108,14 @@ The cross-review made the following mandatory before implementation freeze:
 
 ## Next Planned Work
 1. Update `DATABASE_SCHEMA_V1.md` to incorporate all Freeze Candidate 1 changes.
-2. Produce an acceptance-to-schema traceability matrix.
-3. Produce the technical-spike implementation plan.
-4. Create an isolated spike branch only after documentation is internally consistent.
-5. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
-6. Validate printing/barcode constraints.
-7. Review spike evidence and only then freeze the V1 schema and scaffold the full application.
+2. Produce command-to-schema/accounting/inventory/permission traceability.
+3. Produce document lifecycle/state-transition and domain-error contracts.
+4. Cross-review all commands against schema, posting matrix, inventory movement matrix, and acceptance tests.
+5. Produce the technical-spike implementation plan.
+6. Create an isolated spike branch only after documentation is internally consistent.
+7. Validate Flutter + Drift + encrypted SQLite + Android Keystore + Noto typography + RTL + Latin digits + representative motion.
+8. Validate printing/barcode constraints.
+9. Review spike evidence and only then freeze the V1 schema/domain contracts and scaffold the full application.
 
 ## Resume Protocol
-If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/DESIGN_SYSTEM.md`, `docs/SCHEMA_CROSS_REVIEW_V1.md`, and the active schema/acceptance artifacts before taking action.
+If continuing in a fresh conversation, use the key `IBEX2-CONTINUE`, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, `docs/SCHEMA_CROSS_REVIEW_V1.md`, and the active schema/acceptance artifacts before taking action.
