@@ -63,5 +63,24 @@ The selected Flutter + Drift + sqlite3 3.x + sqlite3mc direction is technically 
 - Performance on representative low/mid-range devices.
 - Production hardening of Android manifest, backup exclusion, release signing, and secure-storage options.
 
+## 2026-08-11 — Chat-first Visual Prototype Gate started
+
+### Implemented
+- Replaced the placeholder runtime screen with the first polished Chat-first IBEX shell.
+- Arabic RTL is the primary layout direction and all hard-coded visible numeric examples use Latin digits.
+- Added responsive behavior: mobile uses a drawer; wide layouts expose a persistent lightweight sidebar.
+- Added central conversational workspace, greeting/prompt suggestions, user message bubble, agent response marker, and persistent composer.
+- Added a typed Sale Draft Card showing customer, warehouse, product/unit, quantity, SAR price, total, lifecycle warning, and explicit `اعتماد / تعديل / إلغاء` controls.
+- Added visual state transitions for awaiting approval, approved, changed/review-required, and cancelled.
+- The prototype explicitly states that preview does not create accounting or inventory truth.
+- Added widget tests for Arabic RTL rendering, sale-draft content, approval state, material-edit review reset, and composer interaction.
+- Android Runtime workflow now publishes the debug APK as the short-lived artifact `ibex-visual-prototype-debug-apk` after a successful Android build. The upload action is pinned to an immutable commit.
+
+### Gate state
+The visual shell and interaction tests are committed. Foundation CI and Android build/runtime CI are currently the acceptance gates. The prototype is not declared ready for user installation until both the current static/test run and current APK/runtime run complete successfully and the APK artifact is confirmed present.
+
+### Visual review scope once green
+The first hands-on review will focus on hierarchy, Arabic typography, spacing, composer ergonomics, draft-card clarity, approval confidence, mobile drawer behavior, and whether the overall interaction feels like an operational ChatGPT-style product rather than a traditional ERP screen.
+
 ### Promotion rule
-The emulator gate is now **Passed**, but production scaffold promotion still requires representative-device security/runtime validation and the remaining critical foundation gates.
+The emulator gate is **Passed**, but production scaffold promotion still requires representative-device security/runtime validation and the remaining critical foundation gates. The visual prototype may be installed for UX evaluation once its own CI/build gates are green; UX approval does not itself promote spike code to production.
