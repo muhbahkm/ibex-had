@@ -8,6 +8,7 @@ class ParsedSaleCreateIntent {
     required this.quantityText,
     required this.unitPriceText,
     required this.currencyCode,
+    required this.settlementMode,
   });
 
   final String customerQuery;
@@ -16,6 +17,7 @@ class ParsedSaleCreateIntent {
   final String quantityText;
   final String unitPriceText;
   final String currencyCode;
+  final String settlementMode;
 }
 
 sealed class SaleConversationIntent {
@@ -95,15 +97,16 @@ class SaleIntentInterpreter {
     final price = _extractPrice(text);
     final quantity = _extractQuantity(text);
     final currency = _extractCurrency(text);
+    final settlementMode = _extractSettlementMode(text);
     final unit = _captureAfterKeyword(
       text,
       const ['الوحدة', 'بوحدة', 'وحدة'],
-      stopWords: const ['على حساب', 'للعميل', 'العميل', 'بسعر', 'السعر', 'بكمية', 'الكمية'],
+      stopWords: const ['على حساب', 'للعميل', 'العميل', 'بسعر', 'السعر', 'بكمية', 'الكمية', 'نقدا', 'نقدًا'],
     );
     final customer = _captureAfterKeyword(
       text,
       const ['على حساب', 'للعميل', 'العميل'],
-      stopWords: const ['بسعر', 'السعر', 'بكمية', 'الكمية', 'الوحدة'],
+      stopWords: const ['بسعر', 'السعر', 'بكمية', 'الكمية', 'الوحدة', 'نقدا', 'نقدًا'],
     );
     final product = _captureAfterKeyword(
       text,
@@ -117,6 +120,8 @@ class SaleIntentInterpreter {
         'على حساب',
         'للعميل',
         'العميل',
+        'نقدا',
+        'نقدًا',
       ],
     );
 
@@ -128,6 +133,12 @@ class SaleIntentInterpreter {
     }
     if (currency == null) {
       throw const DomainError('SALE_INTENT_CURRENCY_REQUIRED', 'Sale command must include a supported currency.');
+    }
+    if (settlementMode == null) {
+      throw const DomainError(
+        'SALE_INTENT_SETTLEMENT_REQUIRED',
+        'Sale command must explicitly indicate cash or on-account settlement.',
+      );
     }
     if (unit == null || unit.isEmpty) {
       throw const DomainError('SALE_INTENT_UNIT_REQUIRED', 'Sale command must include a unit.');
@@ -146,7 +157,15 @@ class SaleIntentInterpreter {
       quantityText: quantity,
       unitPriceText: price,
       currencyCode: currency,
+      settlementMode: settlementMode,
     );
+  }
+
+  String? _extractSettlementMode(String text) {
+    final credit = text.contains('على حساب') || text.contains('آجل') || text.contains('اجل');
+    final cash = text.contains('نقدا') || text.contains('نقدًا') || text.contains('نقدي') || text.contains('كاش');
+    if (credit == cash) return null;
+    return credit ? 'credit' : 'cash';
   }
 
   String? _extractPrice(String text) {
