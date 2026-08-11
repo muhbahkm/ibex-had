@@ -11,6 +11,8 @@ import '../agent/operational_action_facade.dart';
 import '../agent/operational_draft.dart';
 import '../agent/operational_draft_repository.dart';
 import '../agent/sale_operational_workflow.dart';
+import '../ai/gemini_api_key_store.dart';
+import '../ai/gemini_operational_intent_resolver.dart';
 import '../core/id/stable_operation_id.dart';
 import '../database/encrypted_database_opener.dart';
 import '../database/spike_database.dart';
@@ -24,6 +26,7 @@ import '../operating_engine/post_sale_service.dart';
 import '../operating_engine/receive_customer_payment_service.dart';
 import '../operating_engine/reverse_expense_service.dart';
 import '../operating_engine/transfer_stock_service.dart';
+import '../presentation/ai_enabled_persistent_sale_chat_controller.dart';
 import '../presentation/persistent_sale_chat_controller.dart';
 import '../queries/customer_balance_query.dart';
 import '../queries/inventory_query.dart';
@@ -107,10 +110,12 @@ class IbexRuntimeSession {
         db: db,
         businessId: config.businessId,
       );
-      final controller = PersistentSaleChatController(
+      final geminiKeyStore = SecureGeminiApiKeyStore();
+      final controller = AiEnabledPersistentSaleChatController(
         workflow: workflow,
         readQueries: readQueries,
         defaultWarehouseId: config.defaultWarehouseId,
+        aiResolver: GeminiOperationalIntentResolver(keyStore: geminiKeyStore),
         postingContextFactory: (OperationalDraft draft) async {
           final currency = draft.payload['currency_code'];
           if (currency is! String) {
