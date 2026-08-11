@@ -2,6 +2,8 @@ import '../agent/create_sale_draft_service.dart';
 import '../core/errors/domain_error.dart';
 import 'customer_balance_query.dart';
 import 'inventory_query.dart';
+import 'local_supplier_lookup.dart';
+import 'supplier_balance_query.dart';
 
 class CustomerBalanceReadResult {
   const CustomerBalanceReadResult({
@@ -13,6 +15,18 @@ class CustomerBalanceReadResult {
   final String customerId;
   final String customerName;
   final List<CustomerCurrencyBalance> balances;
+}
+
+class SupplierBalanceReadResult {
+  const SupplierBalanceReadResult({
+    required this.supplierId,
+    required this.supplierName,
+    required this.balances,
+  });
+
+  final String supplierId;
+  final String supplierName;
+  final List<SupplierCurrencyBalance> balances;
 }
 
 class InventoryBalanceReadResult {
@@ -36,6 +50,8 @@ class OperationalReadQueryService {
     required this.inventory,
     required this.businessId,
     required this.defaultWarehouseId,
+    this.supplierLookup,
+    this.supplierBalances,
   });
 
   final SaleDraftCatalog catalog;
@@ -43,6 +59,8 @@ class OperationalReadQueryService {
   final InventoryQuery inventory;
   final String businessId;
   final String defaultWarehouseId;
+  final LocalSupplierLookup? supplierLookup;
+  final SupplierBalanceQuery? supplierBalances;
 
   Future<CustomerBalanceReadResult> customerBalance(String customerQuery) async {
     final customer = _requireSingle(
@@ -57,6 +75,31 @@ class OperationalReadQueryService {
     return CustomerBalanceReadResult(
       customerId: customer.id,
       customerName: customer.name,
+      balances: List.unmodifiable(balances),
+    );
+  }
+
+  Future<SupplierBalanceReadResult> supplierBalance(String supplierQuery) async {
+    final lookup = supplierLookup;
+    final balancesQuery = supplierBalances;
+    if (lookup == null || balancesQuery == null) {
+      throw const DomainError(
+        'SUPPLIER_READ_SERVICE_UNAVAILABLE',
+        'Supplier read dependencies are not configured.',
+      );
+    }
+    final supplier = _requireSingle(
+      await lookup.find(supplierQuery.trim()),
+      missingCode: 'SUPPLIER_NOT_FOUND',
+      ambiguousCode: 'SUPPLIER_AMBIGUOUS',
+    );
+    final balances = await balancesQuery.bySupplier(
+      businessId: businessId,
+      supplierId: supplier.id,
+    );
+    return SupplierBalanceReadResult(
+      supplierId: supplier.id,
+      supplierName: supplier.name,
       balances: List.unmodifiable(balances),
     );
   }
