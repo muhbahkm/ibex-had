@@ -9,6 +9,10 @@ on:
       - '.github/workflows/ibex-android-runtime-gate.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ibex-android-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-runtime:
     runs-on: ubuntu-latest
@@ -28,7 +32,7 @@ jobs:
         working-directory: spike/ibex_foundation
         run: |
           flutter pub get
-          dart run build_runner build
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Generate disposable Android host
         working-directory: spike/ibex_foundation
