@@ -5,6 +5,7 @@ import 'customer_receipts_table.dart';
 import 'master_data_tables.dart';
 import 'operational_drafts_table.dart';
 import 'spike_tables.dart';
+import 'supplier_payments_table.dart';
 
 part 'spike_database.g.dart';
 
@@ -26,6 +27,7 @@ part 'spike_database.g.dart';
     CustomerLedger,
     SupplierLedger,
     CustomerReceipts,
+    SupplierPayments,
     AuditLogs,
     OperationalDraftRecords,
     Customers,
@@ -42,7 +44,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,6 +80,9 @@ class SpikeDatabase extends _$SpikeDatabase {
             await m.createTable(purchaseItems);
             await m.createTable(purchasePayments);
             await m.createTable(supplierLedger);
+          }
+          if (from < 8) {
+            await m.createTable(supplierPayments);
           }
         },
         beforeOpen: (_) async {
