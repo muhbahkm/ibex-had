@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -75,12 +76,7 @@ class IbexRuntimeSession {
           'Local business settings must be completed before operational runtime starts.',
         );
       }
-      if (settings.baseCurrencyCode != config.baseCurrencyCode) {
-        throw const DomainError(
-          'BUSINESS_CONFIG_CURRENCY_MISMATCH',
-          'Runtime base currency must match persisted business settings.',
-        );
-      }
+      final baseCurrencyCode = settings.baseCurrencyCode;
       final calendar = FixedOffsetBusinessDocumentCalendar.validated(
         settings.utcOffsetMinutes,
       );
@@ -147,7 +143,7 @@ class IbexRuntimeSession {
           final saleAt = DateTime.now().toUtc();
           final rate = await fx.resolve(
             fromCurrency: currency,
-            toCurrency: config.baseCurrencyCode,
+            toCurrency: baseCurrencyCode,
             at: saleAt,
           );
           return SalePostingContext(
@@ -159,7 +155,7 @@ class IbexRuntimeSession {
             ),
             businessId: config.businessId,
             userId: config.userId,
-            baseCurrencyCode: config.baseCurrencyCode,
+            baseCurrencyCode: baseCurrencyCode,
             exchangeRateScaled: rate.rateScaled,
             cashAccountId: config.cashAccountId,
             cashLedgerAccountId: config.cashLedgerAccountId,
