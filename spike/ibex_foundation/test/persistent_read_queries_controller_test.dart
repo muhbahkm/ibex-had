@@ -13,7 +13,9 @@ import 'package:ibex_foundation_spike/operating_engine/post_sale_service.dart';
 import 'package:ibex_foundation_spike/presentation/persistent_sale_chat_controller.dart';
 import 'package:ibex_foundation_spike/queries/customer_balance_query.dart';
 import 'package:ibex_foundation_spike/queries/inventory_query.dart';
+import 'package:ibex_foundation_spike/queries/local_supplier_lookup.dart';
 import 'package:ibex_foundation_spike/queries/operational_read_query_service.dart';
+import 'package:ibex_foundation_spike/queries/supplier_balance_query.dart';
 
 void main() {
   late SpikeDatabase db;
@@ -28,6 +30,15 @@ void main() {
             businessId: 'B-1',
             name: 'محمد عبدالله باحكم',
             normalizedName: ArabicSearchNormalizer.normalize('محمد عبدالله باحكم'),
+            updatedAt: now,
+          ),
+        );
+    await db.into(db.suppliers).insert(
+          SuppliersCompanion.insert(
+            id: 'SUP-1',
+            businessId: 'B-1',
+            name: 'مورد العسل',
+            normalizedName: ArabicSearchNormalizer.normalize('مورد العسل'),
             updatedAt: now,
           ),
         );
@@ -52,6 +63,20 @@ void main() {
             baseDebitScaled: const Value(75 * 10000),
             occurredAt: now,
             operationId: 'OP-SALE-1',
+          ),
+        );
+    await db.into(db.supplierLedger).insert(
+          SupplierLedgerCompanion.insert(
+            id: 'SL-1',
+            businessId: 'B-1',
+            supplierId: 'SUP-1',
+            sourceType: 'purchase',
+            sourceId: 'PUR-1',
+            currencyCode: 'SAR',
+            creditScaled: const Value(600 * 10000),
+            baseCreditScaled: const Value(600 * 10000),
+            occurredAt: now,
+            operationId: 'OP-PUR-1',
           ),
         );
     await db.into(db.inventoryBalances).insert(
@@ -81,6 +106,8 @@ void main() {
         catalog: catalog,
         customerBalances: CustomerBalanceQuery(db),
         inventory: InventoryQuery(db),
+        supplierLookup: LocalSupplierLookup(db: db, businessId: 'B-1'),
+        supplierBalances: SupplierBalanceQuery(db),
         businessId: 'B-1',
         defaultWarehouseId: 'WH-1',
       ),
@@ -118,6 +145,19 @@ void main() {
     expect(await db.select(db.journalEntries).get(), isEmpty);
     expect(await db.select(db.stockMovements).get(), isEmpty);
     expect(await db.select(db.operationLog).get(), isEmpty);
+  });
+
+  test('supplier balance chat reads payable truth without creating payment or journal', () async {
+    controller.submitNaturalLanguage('كم رصيد المورد مورد العسل؟');
+    await _waitForController(controller);
+
+    expect(controller.lastError, isNull);
+    expect(controller.messages.last.text, contains('600 SAR'));
+    expect(controller.draft, isNull);
+    expect(await db.select(db.supplierPayments).get(), isEmpty);
+    expect(await db.select(db.journalEntries).get(), isEmpty);
+    expect(await db.select(db.operationLog).get(), isEmpty);
+    expect(await db.select(db.auditLogs).get(), isEmpty);
   });
 
   test('inventory chat reads local stock without mutating inventory or opening a draft', () async {
