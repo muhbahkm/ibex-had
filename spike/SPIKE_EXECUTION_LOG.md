@@ -42,22 +42,26 @@ Status: **Active validation — not production-approved**
 - migration preserves historical sale truth and does not invent missing historical base currency.
 - Migration Gate CI run `31464336669` completed successfully through dependency resolution, Drift generation, `flutter analyze`, and `flutter test`.
 
-### Not yet accepted
-Linux CI evidence does not prove Android native packaging, Android Keystore-backed secure storage, process/device runtime behavior, or Android storage semantics.
+## 2026-08-11 — Android Runtime Gate passed
 
-## 2026-08-11 — Android Runtime Gate started
+### Verified on Android emulator
+- Android Runtime Gate run `31482010165` completed with conclusion `success`.
+- Flutter dependency resolution and Drift generation completed successfully.
+- Disposable Android host generation completed successfully.
+- Android debug build completed successfully.
+- KVM-backed Android emulator startup completed successfully.
+- The encrypted persistence integration test completed successfully on the Android emulator.
+- The runtime test exercised app-private storage, secure-key creation/read/reuse, sqlite3mc database creation, atomic `PostSale`, close/reopen, encrypted-header check, wrong-key rejection, encrypted backup, database deletion, restore, operational reconciliation, and secure-key persistence during the test session.
 
-### Added
-- Minimal Flutter runtime entrypoint for the disposable spike.
-- `SecureDatabaseKeyStore` backed by `flutter_secure_storage`, generating/storing a 256-bit database key as 64 lowercase hex characters.
-- Android integration test using the official Flutter `integration_test` package.
-- Runtime test exercises app-private storage, secure-key create/read/reuse, sqlite3mc database creation, atomic `PostSale`, close/reopen, encrypted-header check, wrong-key rejection, encrypted backup, database deletion, restore, reconciliation, and secure-key persistence during the test session.
-- Separate GitHub Actions workflow `IBEX Android Runtime Gate`.
-- Android host is generated only inside CI for the disposable spike; this is not the production scaffold.
-- Emulator runner dependency is pinned to commit `a421e43855164a8197daf9d8d40fe71c6996bb0d` instead of a floating major tag.
+### What this proves
+The selected Flutter + Drift + sqlite3 3.x + sqlite3mc direction is technically viable on an Android emulator for the tested encrypted local-first slice. The Android packaging path can build and execute the native encrypted SQLite runtime, and the tested secure-storage-backed key flow can reopen the same encrypted database during the integration-test lifecycle.
 
-### Current run
-Android Runtime Gate run `31482010165` was queued when this entry was written. It is **not** passing evidence until the emulator executes the integration test successfully.
+### What remains unproven
+- Representative physical Android device behavior.
+- Key persistence across real process death / reboot / upgrade scenarios.
+- Android backup/restore interactions and device migration policy.
+- Performance on representative low/mid-range devices.
+- Production hardening of Android manifest, backup exclusion, release signing, and secure-storage options.
 
 ### Promotion rule
-Do not promote encrypted persistence or Android key-storage configuration into the production scaffold until the Android runtime gate is green and representative-device validation is completed.
+The emulator gate is now **Passed**, but production scaffold promotion still requires representative-device security/runtime validation and the remaining critical foundation gates.
