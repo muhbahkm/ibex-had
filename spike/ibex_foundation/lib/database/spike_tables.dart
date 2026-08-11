@@ -43,6 +43,8 @@ class Sales extends Table {
   TextColumn get businessId => text()();
   TextColumn get documentNo => text()();
   TextColumn get warehouseId => text()();
+  TextColumn get customerId => text().nullable()();
+  TextColumn get settlementMode => text().withDefault(const Constant('cash'))();
   TextColumn get currencyCode => text()();
   // Added in schema v2. Historical v1 rows remain NULL until a trusted
   // migration/reconciliation source can prove the original base currency.
@@ -146,6 +148,29 @@ class Payments extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {id};
+}
+
+class CustomerLedger extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text()();
+  TextColumn get customerId => text()();
+  TextColumn get sourceType => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get currencyCode => text()();
+  IntColumn get debitScaled => integer().withDefault(const Constant(0))();
+  IntColumn get creditScaled => integer().withDefault(const Constant(0))();
+  IntColumn get baseDebitScaled => integer().withDefault(const Constant(0))();
+  IntColumn get baseCreditScaled => integer().withDefault(const Constant(0))();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get operationId => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+        {operationId, sourceType},
+      ];
 }
 
 class AuditLogs extends Table {
