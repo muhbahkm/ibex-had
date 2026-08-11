@@ -1,7 +1,14 @@
 import 'package:flutter/widgets.dart';
-import 'package:ibex_foundation_spike/ui/ibex_chat_shell.dart';
 
-void main() {
+import 'runtime/ibex_runtime_session.dart';
+import 'ui/ibex_runtime_app.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const IbexVisualApp());
+  try {
+    final session = await IbexRuntimeSession.open();
+    runApp(IbexRuntimeApp(controller: session.controller));
+  } catch (error) {
+    runApp(IbexRuntimeFailureApp(errorCode: error.runtimeType.toString()));
+  }
 }
