@@ -1,0 +1,59 @@
+name: IBEX Trial Release APK
+
+on:
+  push:
+    branches:
+      - spike/android-foundation-v1
+    paths:
+      - 'spike/ibex_foundation/**'
+      - '.github/workflows/ibex-trial-release-apk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ibex-trial-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-trial-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies and generate Drift code
+        working-directory: spike/ibex_foundation
+        run: |
+          flutter pub get
+          dart run build_runner build
+
+      - name: Generate disposable Android host
+        working-directory: spike/ibex_foundation
+        run: |
+          rm -rf /tmp/ibex_android_host android
+          flutter create --platforms=android --org com.ibex.had --project-name ibex_foundation_spike /tmp/ibex_android_host
+          cp -R /tmp/ibex_android_host/android ./android
+
+      - name: Build optimized ARM64 release APK
+        working-directory: spike/ibex_foundation
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+
+      - name: Show APK size
+        working-directory: spike/ibex_foundation
+        run: ls -lh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
+      - name: Publish lightweight trial release APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ibex-trial-release-arm64
+          path: spike/ibex_foundation/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
