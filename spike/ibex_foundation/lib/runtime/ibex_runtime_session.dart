@@ -60,7 +60,9 @@ class IbexRuntimeSession {
     );
 
     try {
-      await SpikeSeedData.ensureSeeded(db, config: config);
+      if (config.seedDemoData) {
+        await SpikeSeedData.ensureSeeded(db, config: config);
+      }
 
       final catalog = LocalSaleDraftCatalog(
         db: db,
