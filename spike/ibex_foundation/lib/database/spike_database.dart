@@ -15,16 +15,21 @@ part 'spike_database.g.dart';
     InventoryBalances,
     Sales,
     SaleItems,
+    Purchases,
+    PurchaseItems,
     StockMovements,
     StockMovementItems,
     JournalEntries,
     JournalLines,
     Payments,
+    PurchasePayments,
     CustomerLedger,
+    SupplierLedger,
     CustomerReceipts,
     AuditLogs,
     OperationalDraftRecords,
     Customers,
+    Suppliers,
     Products,
     Units,
     ProductUnits,
@@ -37,7 +42,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -66,6 +71,13 @@ class SpikeDatabase extends _$SpikeDatabase {
           }
           if (from < 6) {
             await m.createTable(customerReceipts);
+          }
+          if (from < 7) {
+            await m.createTable(suppliers);
+            await m.createTable(purchases);
+            await m.createTable(purchaseItems);
+            await m.createTable(purchasePayments);
+            await m.createTable(supplierLedger);
           }
         },
         beforeOpen: (_) async {
