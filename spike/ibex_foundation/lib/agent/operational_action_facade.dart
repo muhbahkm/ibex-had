@@ -1,5 +1,7 @@
 import '../operating_engine/pay_supplier_command.dart';
 import '../operating_engine/pay_supplier_service.dart';
+import '../operating_engine/post_expense_command.dart';
+import '../operating_engine/post_expense_service.dart';
 import '../operating_engine/post_purchase_command.dart';
 import '../operating_engine/post_purchase_return_command.dart';
 import '../operating_engine/post_purchase_return_service.dart';
@@ -26,6 +28,7 @@ class OperationalActionFacade {
     required this.transferStock,
     required this.postSaleReturn,
     required this.postPurchaseReturn,
+    required this.postExpense,
   });
 
   static const postSaleCommand = 'PostSale';
@@ -35,6 +38,7 @@ class OperationalActionFacade {
   static const transferStockCommand = 'TransferStock';
   static const postSaleReturnCommand = 'PostSaleReturn';
   static const postPurchaseReturnCommand = 'PostPurchaseReturn';
+  static const postExpenseCommand = 'PostExpense';
 
   static const registeredMutationCommands = {
     postSaleCommand,
@@ -44,6 +48,7 @@ class OperationalActionFacade {
     transferStockCommand,
     postSaleReturnCommand,
     postPurchaseReturnCommand,
+    postExpenseCommand,
   };
 
   final AgentCommandRegistry registry;
@@ -55,6 +60,7 @@ class OperationalActionFacade {
   final TransferStockService transferStock;
   final PostSaleReturnService postSaleReturn;
   final PostPurchaseReturnService postPurchaseReturn;
+  final PostExpenseService postExpense;
 
   Future<PostSaleResult> executePostSale(PostSaleCommand command) async {
     registry.requireRegistered(postSaleCommand);
@@ -128,5 +134,15 @@ class OperationalActionFacade {
       permission: OperationalPermissions.postPurchaseReturn,
     );
     return postPurchaseReturn.execute(command);
+  }
+
+  Future<PostExpenseResult> executePostExpense(PostExpenseCommand command) async {
+    registry.requireRegistered(postExpenseCommand);
+    await authorization.requirePermission(
+      businessId: command.businessId,
+      userId: command.userId,
+      permission: OperationalPermissions.postExpense,
+    );
+    return postExpense.execute(command);
   }
 }
