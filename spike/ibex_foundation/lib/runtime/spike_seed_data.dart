@@ -15,6 +15,18 @@ class SpikeSeedData {
     final now = DateTime.now().toUtc();
     final fxEffectiveAt = DateTime.utc(2026, 1, 1);
     await db.transaction(() async {
+      await db.into(db.businessSettings).insertOnConflictUpdate(
+            BusinessSettingsCompanion.insert(
+              businessId: config.businessId,
+              displayName: 'IBEX Local Demo',
+              baseCurrencyCode: config.baseCurrencyCode,
+              utcOffsetMinutes: 180,
+              onboardingComplete: const Value(true),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+
       await db.into(db.warehouses).insertOnConflictUpdate(
             WarehousesCompanion.insert(
               id: config.defaultWarehouseId,
