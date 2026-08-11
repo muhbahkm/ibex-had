@@ -20,7 +20,7 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
-  test('encrypted v1 database migrates through v15 without inventing historical truth', () async {
+  test('encrypted v1 database migrates through v16 without inventing historical truth', () async {
     _createEncryptedV1Snapshot(dbFile, key);
 
     final beforeHeader = await dbFile.openRead(0, 16).fold<List<int>>(<int>[], (a, b) => a..addAll(b));
@@ -42,7 +42,7 @@ void main() {
     expect(sale.baseTotalScaled, 375 * 10000);
 
     final version = await migrated.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 15);
+    expect(version.data.values.single, 16);
 
     final columns = await migrated.customSelect('PRAGMA table_info(sales)').get();
     final columnNames = columns.map((row) => row.data['name']).toSet();
@@ -78,6 +78,7 @@ void main() {
       'fx_rates',
       'expenses',
       'expense_reversals',
+      'business_settings',
     };
     final migratedTables = await migrated.customSelect(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
