@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import '../database/spike_database.dart';
 
 class InventoryBalanceSnapshot {
