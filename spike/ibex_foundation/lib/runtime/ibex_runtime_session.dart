@@ -15,6 +15,9 @@ import '../database/encrypted_database_opener.dart';
 import '../database/spike_database.dart';
 import '../operating_engine/post_sale_service.dart';
 import '../presentation/persistent_sale_chat_controller.dart';
+import '../queries/customer_balance_query.dart';
+import '../queries/inventory_query.dart';
+import '../queries/operational_read_query_service.dart';
 import '../security/secure_database_key_store.dart';
 import 'spike_runtime_config.dart';
 import 'spike_seed_data.dart';
@@ -56,9 +59,17 @@ class IbexRuntimeSession {
         draftRepository: OperationalDraftRepository(db),
         postSaleService: PostSaleService(db),
       );
+      final readQueries = OperationalReadQueryService(
+        catalog: catalog,
+        customerBalances: CustomerBalanceQuery(db),
+        inventory: InventoryQuery(db),
+        businessId: config.businessId,
+        defaultWarehouseId: config.defaultWarehouseId,
+      );
       const fx = SpikeSyntheticFxRateProvider();
       final controller = PersistentSaleChatController(
         workflow: workflow,
+        readQueries: readQueries,
         defaultWarehouseId: config.defaultWarehouseId,
         postingContextFactory: (OperationalDraft draft) {
           final currency = draft.payload['currency_code'];
