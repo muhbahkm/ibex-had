@@ -20,7 +20,7 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
-  test('encrypted v1 database migrates through v4 without inventing historical base currency', () async {
+  test('encrypted v1 database migrates through v5 without inventing historical truth', () async {
     _createEncryptedV1Snapshot(dbFile, key);
 
     final beforeHeader = await dbFile.openRead(0, 16).fold<List<int>>(<int>[], (a, b) => a..addAll(b));
@@ -35,15 +35,18 @@ void main() {
     expect(sale.documentNo, 'SAL-2026-000001');
     expect(sale.currencyCode, 'USD');
     expect(sale.baseCurrencyCode, isNull);
+    expect(sale.customerId, isNull);
+    expect(sale.settlementMode, 'cash');
     expect(sale.exchangeRateScaled, 375000000);
     expect(sale.totalScaled, 100 * 10000);
     expect(sale.baseTotalScaled, 375 * 10000);
 
     final version = await migrated.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 4);
+    expect(version.data.values.single, 5);
 
     final columns = await migrated.customSelect('PRAGMA table_info(sales)').get();
-    expect(columns.any((row) => row.data['name'] == 'base_currency_code'), isTrue);
+    final columnNames = columns.map((row) => row.data['name']).toSet();
+    expect(columnNames, containsAll(['base_currency_code', 'customer_id', 'settlement_mode']));
 
     final requiredTables = {
       'operational_draft_records',
@@ -52,6 +55,7 @@ void main() {
       'units',
       'product_units',
       'warehouses',
+      'customer_ledger',
     };
     final migratedTables = await migrated.customSelect(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
@@ -66,6 +70,8 @@ void main() {
     );
     final reopenedSale = await reopened.select(reopened.sales).getSingle();
     expect(reopenedSale.baseCurrencyCode, isNull);
+    expect(reopenedSale.customerId, isNull);
+    expect(reopenedSale.settlementMode, 'cash');
     expect(reopenedSale.operationId, 'OP-V1');
     await reopened.close();
   });
