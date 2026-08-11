@@ -10,6 +10,18 @@ void main() {
     expect((intent as CustomerBalanceReadIntent).customerQuery, 'محمد عبدالله');
   });
 
+  test('parses supplier balance before generic customer balance intent', () {
+    final intent = interpreter.interpret('كم رصيد المورد مورد العسل؟');
+    expect(intent, isA<SupplierBalanceReadIntent>());
+    expect((intent as SupplierBalanceReadIntent).supplierQuery, 'مورد العسل');
+  });
+
+  test('supports natural supplier payable wording', () {
+    final intent = interpreter.interpret('كم علينا للمورد مورد العسل؟');
+    expect(intent, isA<SupplierBalanceReadIntent>());
+    expect((intent as SupplierBalanceReadIntent).supplierQuery, 'مورد العسل');
+  });
+
   test('parses Arabic inventory read intent and strips optional entity word', () {
     final intent = interpreter.interpret('اعرض مخزون الصنف سدر عبوة كيلو.');
     expect(intent, isA<InventoryBalanceReadIntent>());
