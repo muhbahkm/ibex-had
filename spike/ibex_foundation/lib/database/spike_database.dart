@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 
+import 'operational_drafts_table.dart';
 import 'spike_tables.dart';
 
 part 'spike_database.g.dart';
@@ -18,6 +19,7 @@ part 'spike_database.g.dart';
     JournalLines,
     Payments,
     AuditLogs,
+    OperationalDraftRecords,
   ],
 )
 class SpikeDatabase extends _$SpikeDatabase {
@@ -26,7 +28,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -37,6 +39,9 @@ class SpikeDatabase extends _$SpikeDatabase {
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.addColumn(sales, sales.baseCurrencyCode);
+          }
+          if (from < 3) {
+            await m.createTable(operationalDraftRecords);
           }
         },
         beforeOpen: (_) async {
