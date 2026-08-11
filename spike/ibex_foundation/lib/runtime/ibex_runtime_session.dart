@@ -17,7 +17,9 @@ import '../operating_engine/post_sale_service.dart';
 import '../presentation/persistent_sale_chat_controller.dart';
 import '../queries/customer_balance_query.dart';
 import '../queries/inventory_query.dart';
+import '../queries/local_supplier_lookup.dart';
 import '../queries/operational_read_query_service.dart';
+import '../queries/supplier_balance_query.dart';
 import '../security/secure_database_key_store.dart';
 import 'spike_runtime_config.dart';
 import 'spike_seed_data.dart';
@@ -63,6 +65,11 @@ class IbexRuntimeSession {
         catalog: catalog,
         customerBalances: CustomerBalanceQuery(db),
         inventory: InventoryQuery(db),
+        supplierLookup: LocalSupplierLookup(
+          db: db,
+          businessId: config.businessId,
+        ),
+        supplierBalances: SupplierBalanceQuery(db),
         businessId: config.businessId,
         defaultWarehouseId: config.defaultWarehouseId,
       );
