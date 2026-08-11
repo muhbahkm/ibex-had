@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ibex_foundation_spike/agent/approved_expense_draft_to_command.dart';
 import 'package:ibex_foundation_spike/agent/command_registry.dart';
