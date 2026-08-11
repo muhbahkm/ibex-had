@@ -73,30 +73,43 @@ class CreateSaleDraftService {
     _requireNonBlank(request.draftId, 'DRAFT_ID_REQUIRED');
     _requireNonBlank(request.warehouseId, 'WAREHOUSE_REQUIRED');
 
-    final customer = await _resolveOne<SaleDraftCustomer>(
+    final customer = _resolveOne<SaleDraftCustomer>(
       await catalog.findCustomers(request.customerQuery.trim()),
       missingCode: 'CUSTOMER_NOT_FOUND',
       ambiguousCode: 'CUSTOMER_AMBIGUOUS',
     );
-    final product = await _resolveOne<SaleDraftProduct>(
+    final product = _resolveOne<SaleDraftProduct>(
       await catalog.findProducts(request.productQuery.trim()),
       missingCode: 'PRODUCT_NOT_FOUND',
       ambiguousCode: 'PRODUCT_AMBIGUOUS',
     );
-    final unit = await _resolveOne<SaleDraftUnit>(
+    final unit = _resolveOne<SaleDraftUnit>(
       await catalog.findUnitsForProduct(product.id, request.unitQuery.trim()),
       missingCode: 'UNIT_NOT_FOUND',
       ambiguousCode: 'UNIT_AMBIGUOUS',
     );
 
-    final quantity = Quantity.parse(
+    final quantity = Quantity.parseExact(
       request.quantityText,
-      allowedPrecision: unit.quantityPrecision,
+      allowedDecimals: unit.quantityPrecision,
     );
-    final unitPrice = Money.parse(
+    final unitPrice = Money.parseExact(
       request.unitPriceText,
-      currencyCode: request.currencyCode,
+      request.currencyCode,
     );
+
+    if (quantity.isZero || quantity.isNegative) {
+      throw const DomainError(
+        'SALE_DRAFT_QUANTITY_INVALID',
+        'Sale draft quantity must be greater than zero.',
+      );
+    }
+    if (unitPrice.isZero || unitPrice.isNegative) {
+      throw const DomainError(
+        'SALE_DRAFT_PRICE_INVALID',
+        'Sale draft unit price must be greater than zero.',
+      );
+    }
 
     final payload = <String, Object?>{
       'customer_id': customer.id,
