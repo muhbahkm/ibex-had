@@ -22,6 +22,7 @@ import '../operating_engine/post_purchase_service.dart';
 import '../operating_engine/post_sale_return_service.dart';
 import '../operating_engine/post_sale_service.dart';
 import '../operating_engine/receive_customer_payment_service.dart';
+import '../operating_engine/reverse_expense_service.dart';
 import '../operating_engine/transfer_stock_service.dart';
 import '../presentation/persistent_sale_chat_controller.dart';
 import '../queries/customer_balance_query.dart';
@@ -81,6 +82,7 @@ class IbexRuntimeSession {
         postSaleReturn: PostSaleReturnService(db),
         postPurchaseReturn: PostPurchaseReturnService(db),
         postExpense: PostExpenseService(db),
+        reverseExpense: ReverseExpenseService(db),
       );
 
       final workflow = SaleOperationalWorkflow(
