@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ibex_foundation_spike/agent/local_sale_draft_catalog.dart';
 import 'package:ibex_foundation_spike/core/text/arabic_search_normalizer.dart';
