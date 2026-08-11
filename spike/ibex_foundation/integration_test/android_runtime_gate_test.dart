@@ -68,9 +68,9 @@ void main() {
     final manifest = await backup.createClosedDatabaseBackup(
       sourceDatabase: dbFile,
       destinationDirectory: backupDir,
-      schemaVersion: 2,
+      schemaVersion: 6,
     );
-    expect(manifest.schemaVersion, 2);
+    expect(manifest.schemaVersion, 6);
     expect(manifest.databaseSha256, hasLength(64));
 
     await dbFile.delete();
