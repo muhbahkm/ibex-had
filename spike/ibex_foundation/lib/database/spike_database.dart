@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'customer_receipts_table.dart';
 import 'master_data_tables.dart';
 import 'operational_drafts_table.dart';
+import 'purchase_return_tables.dart';
 import 'sale_return_tables.dart';
 import 'spike_tables.dart';
 import 'stock_transfer_tables.dart';
@@ -23,6 +24,9 @@ part 'spike_database.g.dart';
     SaleReturns,
     SaleReturnItems,
     SaleRefundPayments,
+    PurchaseReturns,
+    PurchaseReturnItems,
+    PurchaseReturnCashReceipts,
     StockMovements,
     StockMovementItems,
     StockTransfers,
@@ -51,7 +55,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -99,6 +103,11 @@ class SpikeDatabase extends _$SpikeDatabase {
             await m.createTable(saleReturns);
             await m.createTable(saleReturnItems);
             await m.createTable(saleRefundPayments);
+          }
+          if (from < 11) {
+            await m.createTable(purchaseReturns);
+            await m.createTable(purchaseReturnItems);
+            await m.createTable(purchaseReturnCashReceipts);
           }
         },
         beforeOpen: (_) async {
