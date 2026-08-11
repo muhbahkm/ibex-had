@@ -1,0 +1,60 @@
+name: IBEX Materialize Android Host
+
+on:
+  push:
+    branches:
+      - spike/android-foundation-v1
+    paths:
+      - '.github/workflows/ibex-materialize-android-host.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate official Android host
+        working-directory: spike/ibex_foundation
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/ibex_android_host android
+          flutter create --platforms=android --org com.ibex --project-name had /tmp/ibex_android_host
+          cp -R /tmp/ibex_android_host/android ./android
+
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="had"/android:label="IBEX"/' "$MANIFEST"
+          sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+          sed -i 's/<application/<application android:allowBackup="false" android:usesCleartextTraffic="false"/' "$MANIFEST"
+
+      - name: Verify generated host builds production entrypoint
+        working-directory: spike/ibex_foundation
+        run: |
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          flutter build apk --release --target lib/main_production.dart --target-platform android-arm64 --split-per-abi
+
+      - name: Commit Android host
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add spike/ibex_foundation/android
+          if git diff --cached --quiet; then
+            echo 'Android host already materialized; nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'build: commit hardened Android production host'
+          git push origin HEAD:spike/android-foundation-v1
