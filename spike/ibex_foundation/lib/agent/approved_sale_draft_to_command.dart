@@ -15,6 +15,7 @@ class SalePostingContext {
     required this.inventoryLedgerAccountId,
     required this.cogsLedgerAccountId,
     required this.saleAt,
+    this.accountsReceivableLedgerAccountId = 'ACC-AR',
   });
 
   final String operationId;
@@ -27,6 +28,7 @@ class SalePostingContext {
   final String salesRevenueAccountId;
   final String inventoryLedgerAccountId;
   final String cogsLedgerAccountId;
+  final String accountsReceivableLedgerAccountId;
   final DateTime saleAt;
 }
 
@@ -47,10 +49,15 @@ class ApprovedSaleDraftToCommand {
 
     final warehouseId = draft.payload['warehouse_id'];
     final currencyCode = draft.payload['currency_code'];
+    final customerId = draft.payload['customer_id'];
+    final settlementRaw = draft.payload['settlement_mode'] ?? 'cash';
     final linesValue = draft.payload['lines'];
     if (warehouseId is! String ||
         warehouseId.trim().isEmpty ||
         currencyCode is! String ||
+        customerId is! String ||
+        customerId.trim().isEmpty ||
+        settlementRaw is! String ||
         linesValue is! List ||
         linesValue.isEmpty) {
       throw const DomainError(
@@ -58,6 +65,15 @@ class ApprovedSaleDraftToCommand {
         'Approved sale draft is missing posting fields.',
       );
     }
+
+    final settlementMode = switch (settlementRaw.trim().toLowerCase()) {
+      'cash' => SaleSettlementMode.cash,
+      'credit' => SaleSettlementMode.credit,
+      _ => throw const DomainError(
+          'SALE_SETTLEMENT_MODE_INVALID',
+          'Approved sale draft contains an unsupported settlement mode.',
+        ),
+    };
 
     final lines = <PostSaleLineInput>[];
     for (final raw in linesValue) {
@@ -103,6 +119,9 @@ class ApprovedSaleDraftToCommand {
       salesRevenueAccountId: context.salesRevenueAccountId,
       inventoryLedgerAccountId: context.inventoryLedgerAccountId,
       cogsLedgerAccountId: context.cogsLedgerAccountId,
+      accountsReceivableLedgerAccountId: context.accountsReceivableLedgerAccountId,
+      customerId: customerId,
+      settlementMode: settlementMode,
       saleAt: context.saleAt,
       lines: List.unmodifiable(lines),
     );
