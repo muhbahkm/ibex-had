@@ -7,19 +7,28 @@ import '../agent/approved_sale_draft_to_command.dart';
 import '../agent/command_registry.dart';
 import '../agent/create_sale_draft_service.dart';
 import '../agent/local_sale_draft_catalog.dart';
+import '../agent/operational_action_facade.dart';
 import '../agent/operational_draft.dart';
 import '../agent/operational_draft_repository.dart';
 import '../agent/sale_operational_workflow.dart';
 import '../core/id/stable_operation_id.dart';
 import '../database/encrypted_database_opener.dart';
 import '../database/spike_database.dart';
+import '../finance/local_fx_rate_provider.dart';
+import '../operating_engine/pay_supplier_service.dart';
+import '../operating_engine/post_purchase_return_service.dart';
+import '../operating_engine/post_purchase_service.dart';
+import '../operating_engine/post_sale_return_service.dart';
 import '../operating_engine/post_sale_service.dart';
+import '../operating_engine/receive_customer_payment_service.dart';
+import '../operating_engine/transfer_stock_service.dart';
 import '../presentation/persistent_sale_chat_controller.dart';
 import '../queries/customer_balance_query.dart';
 import '../queries/inventory_query.dart';
 import '../queries/local_supplier_lookup.dart';
 import '../queries/operational_read_query_service.dart';
 import '../queries/supplier_balance_query.dart';
+import '../security/authorization_service.dart';
 import '../security/secure_database_key_store.dart';
 import 'spike_runtime_config.dart';
 import 'spike_seed_data.dart';
@@ -56,10 +65,27 @@ class IbexRuntimeSession {
         catalog: catalog,
         registry: const AgentCommandRegistry({CreateSaleDraftService.commandName}),
       );
+
+      final postSale = PostSaleService(db);
+      final operationalActions = OperationalActionFacade(
+        registry: const AgentCommandRegistry(
+          OperationalActionFacade.registeredMutationCommands,
+        ),
+        authorization: AuthorizationService(db),
+        postSale: postSale,
+        postPurchase: PostPurchaseService(db),
+        receiveCustomerPayment: ReceiveCustomerPaymentService(db),
+        paySupplier: PaySupplierService(db),
+        transferStock: TransferStockService(db),
+        postSaleReturn: PostSaleReturnService(db),
+        postPurchaseReturn: PostPurchaseReturnService(db),
+      );
+
       final workflow = SaleOperationalWorkflow(
         createSaleDraft: createDraft,
         draftRepository: OperationalDraftRepository(db),
-        postSaleService: PostSaleService(db),
+        postSaleService: postSale,
+        postSaleExecutor: operationalActions.executePostSale,
       );
       final readQueries = OperationalReadQueryService(
         catalog: catalog,
@@ -73,16 +99,25 @@ class IbexRuntimeSession {
         businessId: config.businessId,
         defaultWarehouseId: config.defaultWarehouseId,
       );
-      const fx = SpikeSyntheticFxRateProvider();
+      final fx = LocalFxRateProvider(
+        db: db,
+        businessId: config.businessId,
+      );
       final controller = PersistentSaleChatController(
         workflow: workflow,
         readQueries: readQueries,
         defaultWarehouseId: config.defaultWarehouseId,
-        postingContextFactory: (OperationalDraft draft) {
+        postingContextFactory: (OperationalDraft draft) async {
           final currency = draft.payload['currency_code'];
           if (currency is! String) {
             throw StateError('Approved draft has no currency code.');
           }
+          final saleAt = DateTime.now().toUtc();
+          final rate = await fx.resolve(
+            fromCurrency: currency,
+            toCurrency: config.baseCurrencyCode,
+            at: saleAt,
+          );
           return SalePostingContext(
             operationId: StableOperationId.forApprovedSaleDraft(
               businessId: config.businessId,
@@ -93,10 +128,7 @@ class IbexRuntimeSession {
             businessId: config.businessId,
             userId: config.userId,
             baseCurrencyCode: config.baseCurrencyCode,
-            exchangeRateScaled: fx.rateScaled(
-              from: currency,
-              to: config.baseCurrencyCode,
-            ),
+            exchangeRateScaled: rate.rateScaled,
             cashAccountId: config.cashAccountId,
             cashLedgerAccountId: config.cashLedgerAccountId,
             salesRevenueAccountId: config.salesRevenueAccountId,
@@ -104,7 +136,7 @@ class IbexRuntimeSession {
             cogsLedgerAccountId: config.cogsLedgerAccountId,
             accountsReceivableLedgerAccountId:
                 config.accountsReceivableLedgerAccountId,
-            saleAt: DateTime.now().toUtc(),
+            saleAt: saleAt,
           );
         },
       );
