@@ -54,9 +54,33 @@ class OperationalDraftRepository {
       variables: [Variable.withString(draftId)],
       readsFrom: {db.operationalDraftRecords},
     ).get();
-    if (rows.isEmpty) return null;
+    return rows.isEmpty ? null : _decode(rows.single);
+  }
 
-    final row = rows.single;
+  Future<OperationalDraft?> loadLatestOpen({String? commandName}) async {
+    final whereCommand = commandName == null ? '' : 'AND command_name = ?';
+    final variables = <Variable<Object>>[
+      const Variable<String>('cancelled'),
+      const Variable<String>('expired'),
+      const Variable<String>('posted'),
+      if (commandName != null) Variable.withString(commandName),
+    ];
+    final rows = await db.customSelect(
+      '''
+      SELECT draft_id, command_name, version, payload_json, state,
+             created_at_utc, approved_fingerprint
+      FROM operational_draft_records
+      WHERE state NOT IN (?, ?, ?) $whereCommand
+      ORDER BY updated_at_utc DESC
+      LIMIT 1
+      ''',
+      variables: variables,
+      readsFrom: {db.operationalDraftRecords},
+    ).get();
+    return rows.isEmpty ? null : _decode(rows.single);
+  }
+
+  OperationalDraft _decode(QueryRow row) {
     final payloadRaw = row.read<String>('payload_json');
     final decoded = jsonDecode(payloadRaw);
     if (decoded is! Map) {
