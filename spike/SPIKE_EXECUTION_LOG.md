@@ -28,8 +28,36 @@ Status: **Active validation — not production-approved**
 5. Any injected exception before transaction commit must leave zero partial posted truth.
 6. Base currency is business/application context, never a global hard-coded currency.
 
-### CI state
-GitHub Actions workflow `IBEX Foundation Spike` is configured to run dependency resolution, Drift generation, static analysis and tests on every spike-package push. The latest run for this slice was queued at the time this log entry was written. A queued/in-progress run is **not** accepted as passing evidence.
+## 2026-08-11 — Encrypted persistence + migration evidence
+
+### Passed in Linux CI
+- sqlite3mc encrypted database creation/open.
+- plaintext SQLite header absence check.
+- correct-key reopen of persisted operational truth.
+- wrong-key rejection.
+- encrypted backup creation with SHA-256 manifest validation.
+- backup corruption detection before restore.
+- backup → delete → restore → reconciliation for sale, inventory, journal, payment, operation log and audit evidence.
+- encrypted schema migration from v1 to v2.
+- migration preserves historical sale truth and does not invent missing historical base currency.
+- Migration Gate CI run `31464336669` completed successfully through dependency resolution, Drift generation, `flutter analyze`, and `flutter test`.
+
+### Not yet accepted
+Linux CI evidence does not prove Android native packaging, Android Keystore-backed secure storage, process/device runtime behavior, or Android storage semantics.
+
+## 2026-08-11 — Android Runtime Gate started
+
+### Added
+- Minimal Flutter runtime entrypoint for the disposable spike.
+- `SecureDatabaseKeyStore` backed by `flutter_secure_storage`, generating/storing a 256-bit database key as 64 lowercase hex characters.
+- Android integration test using the official Flutter `integration_test` package.
+- Runtime test exercises app-private storage, secure-key create/read/reuse, sqlite3mc database creation, atomic `PostSale`, close/reopen, encrypted-header check, wrong-key rejection, encrypted backup, database deletion, restore, reconciliation, and secure-key persistence during the test session.
+- Separate GitHub Actions workflow `IBEX Android Runtime Gate`.
+- Android host is generated only inside CI for the disposable spike; this is not the production scaffold.
+- Emulator runner dependency is pinned to commit `a421e43855164a8197daf9d8d40fe71c6996bb0d` instead of a floating major tag.
+
+### Current run
+Android Runtime Gate run `31482010165` was queued when this entry was written. It is **not** passing evidence until the emulator executes the integration test successfully.
 
 ### Promotion rule
-Do not promote these implementations to the production scaffold until CI passes and the same transaction/encryption behavior is validated on Android runtime with the selected encrypted SQLite provider.
+Do not promote encrypted persistence or Android key-storage configuration into the production scaffold until the Android runtime gate is green and representative-device validation is completed.
