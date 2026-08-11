@@ -187,7 +187,7 @@ class TransferStockService {
           InventoryBalancesCompanion(
             quantityScaled: Value(sourceQty),
             inventoryValueScaled: Value(sourceValue),
-            wacUnitCostScaled: Value(sourceQty == 0 ? source.wacUnitCostScaled : divideHalfAwayFromZero(sourceValue * 1000000, sourceQty)),
+            wacUnitCostScaled: Value(sourceQty == 0 ? 0 : divideHalfAwayFromZero(sourceValue * 1000000, sourceQty)),
             updatedAt: Value(now),
           ),
         );
