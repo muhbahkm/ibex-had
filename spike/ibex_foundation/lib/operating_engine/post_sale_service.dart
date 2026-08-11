@@ -153,6 +153,7 @@ class PostSaleService {
               documentNo: documentNo,
               warehouseId: command.warehouseId,
               currencyCode: currency,
+              baseCurrencyCode: Value(baseCurrency),
               exchangeRateScaled: command.exchangeRateScaled,
               totalScaled: saleTotalScaled,
               baseTotalScaled: baseSaleMoney.scaled,
