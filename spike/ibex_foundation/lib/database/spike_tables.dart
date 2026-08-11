@@ -46,8 +46,6 @@ class Sales extends Table {
   TextColumn get customerId => text().nullable()();
   TextColumn get settlementMode => text().withDefault(const Constant('cash'))();
   TextColumn get currencyCode => text()();
-  // Added in schema v2. Historical v1 rows remain NULL until a trusted
-  // migration/reconciliation source can prove the original base currency.
   TextColumn get baseCurrencyCode => text().nullable()();
   IntColumn get exchangeRateScaled => integer()();
   IntColumn get totalScaled => integer()();
@@ -78,6 +76,47 @@ class SaleItems extends Table {
   IntColumn get netScaled => integer()();
   IntColumn get cogsUnitCostScaled => integer()();
   IntColumn get cogsTotalScaled => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class Purchases extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text()();
+  TextColumn get documentNo => text()();
+  TextColumn get warehouseId => text()();
+  TextColumn get supplierId => text().nullable()();
+  TextColumn get settlementMode => text().withDefault(const Constant('cash'))();
+  TextColumn get currencyCode => text()();
+  TextColumn get baseCurrencyCode => text()();
+  IntColumn get exchangeRateScaled => integer()();
+  IntColumn get totalScaled => integer()();
+  IntColumn get baseTotalScaled => integer()();
+  TextColumn get status => text()();
+  DateTimeColumn get purchaseAt => dateTime()();
+  TextColumn get journalEntryId => text()();
+  TextColumn get stockMovementId => text()();
+  TextColumn get operationId => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+        {businessId, documentNo},
+        {operationId},
+      ];
+}
+
+class PurchaseItems extends Table {
+  TextColumn get id => text()();
+  TextColumn get purchaseId => text().references(Purchases, #id)();
+  TextColumn get productId => text()();
+  IntColumn get quantityScaled => integer()();
+  IntColumn get unitCostScaled => integer()();
+  IntColumn get netScaled => integer()();
+  IntColumn get baseNetScaled => integer()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -150,10 +189,53 @@ class Payments extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+class PurchasePayments extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text()();
+  TextColumn get purchaseId => text().references(Purchases, #id)();
+  TextColumn get cashAccountId => text()();
+  TextColumn get currencyCode => text()();
+  IntColumn get amountScaled => integer()();
+  IntColumn get baseAmountScaled => integer()();
+  DateTimeColumn get paymentAt => dateTime()();
+  TextColumn get operationId => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+        {operationId},
+      ];
+}
+
 class CustomerLedger extends Table {
   TextColumn get id => text()();
   TextColumn get businessId => text()();
   TextColumn get customerId => text()();
+  TextColumn get sourceType => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get currencyCode => text()();
+  IntColumn get debitScaled => integer().withDefault(const Constant(0))();
+  IntColumn get creditScaled => integer().withDefault(const Constant(0))();
+  IntColumn get baseDebitScaled => integer().withDefault(const Constant(0))();
+  IntColumn get baseCreditScaled => integer().withDefault(const Constant(0))();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get operationId => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+        {operationId, sourceType},
+      ];
+}
+
+class SupplierLedger extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text()();
+  TextColumn get supplierId => text()();
   TextColumn get sourceType => text()();
   TextColumn get sourceId => text()();
   TextColumn get currencyCode => text()();
