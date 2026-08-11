@@ -12,6 +12,18 @@ class Customers extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+class Suppliers extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text()();
+  TextColumn get name => text()();
+  TextColumn get normalizedName => text()();
+  BoolColumn get active => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 class Products extends Table {
   TextColumn get id => text()();
   TextColumn get businessId => text()();
