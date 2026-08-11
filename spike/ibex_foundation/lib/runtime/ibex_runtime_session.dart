@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
 
 import '../agent/approved_sale_draft_to_command.dart';
 import '../agent/command_registry.dart';
@@ -11,6 +10,7 @@ import '../agent/local_sale_draft_catalog.dart';
 import '../agent/operational_draft.dart';
 import '../agent/operational_draft_repository.dart';
 import '../agent/sale_operational_workflow.dart';
+import '../core/id/stable_operation_id.dart';
 import '../database/encrypted_database_opener.dart';
 import '../database/spike_database.dart';
 import '../operating_engine/post_sale_service.dart';
@@ -57,7 +57,6 @@ class IbexRuntimeSession {
         postSaleService: PostSaleService(db),
       );
       const fx = SpikeSyntheticFxRateProvider();
-      const uuid = Uuid();
       final controller = PersistentSaleChatController(
         workflow: workflow,
         defaultWarehouseId: config.defaultWarehouseId,
@@ -67,7 +66,12 @@ class IbexRuntimeSession {
             throw StateError('Approved draft has no currency code.');
           }
           return SalePostingContext(
-            operationId: uuid.v4(),
+            operationId: StableOperationId.forApprovedSaleDraft(
+              businessId: config.businessId,
+              draftId: draft.draftId,
+              version: draft.version,
+              fingerprint: draft.fingerprint,
+            ),
             businessId: config.businessId,
             userId: config.userId,
             baseCurrencyCode: config.baseCurrencyCode,
