@@ -13,6 +13,8 @@ import 'package:ibex_foundation_spike/operating_engine/post_sale_return_service.
 import 'package:ibex_foundation_spike/operating_engine/post_sale_service.dart';
 import 'package:ibex_foundation_spike/operating_engine/receive_customer_payment_command.dart';
 import 'package:ibex_foundation_spike/operating_engine/receive_customer_payment_service.dart';
+import 'package:ibex_foundation_spike/operating_engine/reverse_expense_command.dart';
+import 'package:ibex_foundation_spike/operating_engine/reverse_expense_service.dart';
 import 'package:ibex_foundation_spike/operating_engine/transfer_stock_service.dart';
 import 'package:ibex_foundation_spike/security/authorization_service.dart';
 
@@ -108,6 +110,36 @@ void main() {
     expect(await db.select(db.journalEntries).get(), isEmpty);
     expect(await db.select(db.operationLog).get(), isEmpty);
   });
+
+  test('expense reversal is denied before source lookup or compensating mutation', () async {
+    final db = SpikeDatabase.inMemory();
+    addTearDown(db.close);
+    final now = DateTime.utc(2026, 8, 11);
+    await _insertActiveUser(db, now);
+    final facade = _facade(
+      db,
+      registry: const AgentCommandRegistry({
+        OperationalActionFacade.reverseExpenseCommand,
+      }),
+    );
+
+    await expectLater(
+      facade.executeReverseExpense(
+        ReverseExpenseCommand(
+          operationId: 'OP-EXR-DENIED',
+          businessId: 'B-1',
+          userId: 'U-1',
+          sourceExpenseId: 'EXP-NOT-LOOKED-UP',
+          reason: 'اختبار الصلاحية',
+          reversedAt: now,
+        ),
+      ),
+      throwsA(isA<Exception>()),
+    );
+    expect(await db.select(db.expenseReversals).get(), isEmpty);
+    expect(await db.select(db.journalEntries).get(), isEmpty);
+    expect(await db.select(db.operationLog).get(), isEmpty);
+  });
 }
 
 Future<void> _insertActiveUser(SpikeDatabase db, DateTime now) async {
@@ -166,6 +198,7 @@ OperationalActionFacade _facade(
       postSaleReturn: PostSaleReturnService(db),
       postPurchaseReturn: PostPurchaseReturnService(db),
       postExpense: PostExpenseService(db),
+      reverseExpense: ReverseExpenseService(db),
     );
 
 PaySupplierCommand _payCommand({required String operationId}) => PaySupplierCommand(
