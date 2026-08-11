@@ -12,6 +12,8 @@ import '../operating_engine/post_sale_return_service.dart';
 import '../operating_engine/post_sale_service.dart';
 import '../operating_engine/receive_customer_payment_command.dart';
 import '../operating_engine/receive_customer_payment_service.dart';
+import '../operating_engine/reverse_expense_command.dart';
+import '../operating_engine/reverse_expense_service.dart';
 import '../operating_engine/transfer_stock_command.dart';
 import '../operating_engine/transfer_stock_service.dart';
 import '../security/authorization_service.dart';
@@ -29,6 +31,7 @@ class OperationalActionFacade {
     required this.postSaleReturn,
     required this.postPurchaseReturn,
     required this.postExpense,
+    required this.reverseExpense,
   });
 
   static const postSaleCommand = 'PostSale';
@@ -39,6 +42,7 @@ class OperationalActionFacade {
   static const postSaleReturnCommand = 'PostSaleReturn';
   static const postPurchaseReturnCommand = 'PostPurchaseReturn';
   static const postExpenseCommand = 'PostExpense';
+  static const reverseExpenseCommand = 'ReverseExpense';
 
   static const registeredMutationCommands = {
     postSaleCommand,
@@ -49,6 +53,7 @@ class OperationalActionFacade {
     postSaleReturnCommand,
     postPurchaseReturnCommand,
     postExpenseCommand,
+    reverseExpenseCommand,
   };
 
   final AgentCommandRegistry registry;
@@ -61,6 +66,7 @@ class OperationalActionFacade {
   final PostSaleReturnService postSaleReturn;
   final PostPurchaseReturnService postPurchaseReturn;
   final PostExpenseService postExpense;
+  final ReverseExpenseService reverseExpense;
 
   Future<PostSaleResult> executePostSale(PostSaleCommand command) async {
     registry.requireRegistered(postSaleCommand);
@@ -144,5 +150,15 @@ class OperationalActionFacade {
       permission: OperationalPermissions.postExpense,
     );
     return postExpense.execute(command);
+  }
+
+  Future<ReverseExpenseResult> executeReverseExpense(ReverseExpenseCommand command) async {
+    registry.requireRegistered(reverseExpenseCommand);
+    await authorization.requirePermission(
+      businessId: command.businessId,
+      userId: command.userId,
+      permission: OperationalPermissions.reverseExpense,
+    );
+    return reverseExpense.execute(command);
   }
 }
