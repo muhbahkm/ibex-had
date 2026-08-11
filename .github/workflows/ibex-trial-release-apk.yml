@@ -34,7 +34,7 @@ jobs:
           flutter pub get
           dart run build_runner build
 
-      - name: Generate disposable Android host
+      - name: Generate disposable Android host with Gemini network access
         working-directory: spike/ibex_foundation
         run: |
           set -euo pipefail
