@@ -152,4 +152,59 @@ void main() {
     expect(second.idempotentReplay, isTrue);
     expect(await db.select(db.purchaseReturns).get(), hasLength(1));
   });
+
+  test('return item from another purchase is rejected without partial truth', () async {
+    final sourceA = await postPurchase(operationId: 'OP-PUR-A');
+    final sourceB = await postPurchase(operationId: 'OP-PUR-B');
+
+    await expectLater(
+      returns.execute(returnCommand(
+        purchaseId: sourceA.$1,
+        purchaseItemId: sourceB.$2,
+        operationId: 'OP-PRT-WRONG-LINE',
+      )),
+      throwsA(isA<Exception>()),
+    );
+    expect(await db.select(db.purchaseReturns).get(), isEmpty);
+    expect(await db.select(db.purchaseReturnItems).get(), isEmpty);
+  });
+
+  test('non-positive return quantity is rejected before numbering or mutation', () async {
+    final source = await postPurchase();
+    await expectLater(
+      returns.execute(returnCommand(
+        purchaseId: source.$1,
+        purchaseItemId: source.$2,
+        quantityScaled: 0,
+        operationId: 'OP-PRT-ZERO',
+      )),
+      throwsA(isA<Exception>()),
+    );
+    expect(await db.select(db.purchaseReturns).get(), isEmpty);
+    final sequenceRows = await db.customSelect(
+      "SELECT * FROM document_sequences WHERE document_type = 'purchase_return'",
+    ).get();
+    expect(sequenceRows, isEmpty);
+  });
+
+  test('return fails atomically when current stock is below requested source quantity', () async {
+    final source = await postPurchase();
+    await db.customStatement(
+      'UPDATE inventory_balances SET quantity_scaled = ?, inventory_value_scaled = ?, wac_unit_cost_scaled = ? WHERE warehouse_id = ? AND product_id = ?',
+      [1000000, 100 * 10000, 100 * 10000, 'WH-1', 'P-1'],
+    );
+
+    await expectLater(
+      returns.execute(returnCommand(
+        purchaseId: source.$1,
+        purchaseItemId: source.$2,
+        quantityScaled: 2 * 1000000,
+        operationId: 'OP-PRT-NO-STOCK',
+      )),
+      throwsA(isA<Exception>()),
+    );
+    expect(await db.select(db.purchaseReturns).get(), isEmpty);
+    expect(await db.select(db.purchaseReturnItems).get(), isEmpty);
+    expect(await db.select(db.stockMovements).get(), hasLength(1));
+  });
 }
