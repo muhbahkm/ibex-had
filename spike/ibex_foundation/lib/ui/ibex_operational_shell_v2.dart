@@ -15,8 +15,11 @@ class IbexOperationalShellV2 extends StatefulWidget {
 
 class _IbexOperationalShellV2State extends State<IbexOperationalShellV2> {
   final _composer = TextEditingController();
-  String _section = 'assistant';
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final List<String> _history = <String>['assistant'];
 
+  String get _section => _history.last;
+  bool get _canGoBack => _history.length > 1;
   SaleChatController get controller => widget.controller;
 
   @override
@@ -37,17 +40,26 @@ class _IbexOperationalShellV2State extends State<IbexOperationalShellV2> {
     if (mounted) setState(() {});
   }
 
-  void _select(String value) {
-    setState(() => _section = value);
-    if (Scaffold.maybeOf(context)?.isDrawerOpen ?? false) {
-      Navigator.of(context).pop();
-    }
+  void _navigateTo(String value, {bool replace = false}) {
+    if (value == _section) return;
+    setState(() {
+      if (replace && _history.isNotEmpty) {
+        _history[_history.length - 1] = value;
+      } else {
+        _history.add(value);
+      }
+    });
+  }
+
+  void _goBack() {
+    if (!_canGoBack) return;
+    setState(() => _history.removeLast());
   }
 
   void _submit([String? text]) {
     final value = (text ?? _composer.text).trim();
     if (value.isEmpty) return;
-    setState(() => _section = 'assistant');
+    _navigateTo('assistant');
     controller.submitNaturalLanguage(value);
     _composer.clear();
   }
@@ -57,23 +69,72 @@ class _IbexOperationalShellV2State extends State<IbexOperationalShellV2> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
-        final side = _Sidebar(selected: _section, onSelect: _select);
-        return Scaffold(
-          drawer: wide ? null : Drawer(child: side),
-          body: SafeArea(
-            child: Row(
-              textDirection: TextDirection.ltr,
-              children: [
-                if (wide) SizedBox(width: 260, child: side),
-                Expanded(
-                  child: Column(
-                    children: [
-                      _Header(showMenu: !wide, title: _title(_section)),
-                      Expanded(child: _body()),
-                    ],
+        final side = _Sidebar(
+          selected: _section,
+          onSelect: _navigateTo,
+          dismissOnSelect: !wide,
+        );
+
+        return PopScope(
+          canPop: !_canGoBack,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop) _goBack();
+          },
+          child: Scaffold(
+            key: _scaffoldKey,
+            drawerEnableOpenDragGesture: !wide,
+            drawerScrimColor: Colors.black.withValues(alpha: 0.28),
+            drawer: wide
+                ? null
+                : Drawer(
+                    width: MediaQuery.sizeOf(context).width * 0.82,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.horizontal(left: Radius.circular(22)),
+                    ),
+                    child: SafeArea(child: side),
                   ),
-                ),
-              ],
+            body: SafeArea(
+              child: Row(
+                textDirection: TextDirection.ltr,
+                children: [
+                  if (wide) SizedBox(width: 260, child: side),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _Header(
+                          showMenu: !wide,
+                          showBack: _canGoBack,
+                          title: _title(_section),
+                          onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                          onBack: _goBack,
+                        ),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            reverseDuration: const Duration(milliseconds: 170),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) {
+                              final slide = Tween<Offset>(
+                                begin: const Offset(0.035, 0),
+                                end: Offset.zero,
+                              ).animate(animation);
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(position: slide, child: child),
+                              );
+                            },
+                            child: KeyedSubtree(
+                              key: ValueKey<String>(_section),
+                              child: _body(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -103,7 +164,7 @@ class _IbexOperationalShellV2State extends State<IbexOperationalShellV2> {
       actions: spec.actions,
       onAsk: () {
         _composer.text = spec.prompt;
-        setState(() => _section = 'assistant');
+        _navigateTo('assistant');
       },
     );
   }
@@ -142,7 +203,7 @@ class _IbexOperationalShellV2State extends State<IbexOperationalShellV2> {
                   ),
                   ActionChip(
                     label: const Text('إعداد Gemini'),
-                    onPressed: () => _select('settings'),
+                    onPressed: () => _navigateTo('settings'),
                   ),
                 ],
               ),
@@ -214,25 +275,41 @@ class _IbexOperationalShellV2State extends State<IbexOperationalShellV2> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.showMenu, required this.title});
+  const _Header({
+    required this.showMenu,
+    required this.showBack,
+    required this.title,
+    required this.onMenu,
+    required this.onBack,
+  });
+
   final bool showMenu;
+  final bool showBack;
   final String title;
+  final VoidCallback onMenu;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) => Container(
-        height: 66,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: const BoxDecoration(
+          color: Colors.white,
           border: Border(bottom: BorderSide(color: Color(0xFFE5E9E6))),
         ),
         child: Row(
           children: [
             if (showMenu)
-              Builder(
-                builder: (context) => IconButton(
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  icon: const Icon(Icons.menu_rounded),
-                ),
+              IconButton(
+                tooltip: 'القائمة',
+                onPressed: onMenu,
+                icon: const Icon(Icons.menu_rounded),
+              ),
+            if (showBack)
+              IconButton(
+                tooltip: 'رجوع',
+                onPressed: onBack,
+                icon: const Icon(Icons.arrow_back_rounded),
               ),
             Expanded(
               child: Column(
@@ -240,11 +317,17 @@ class _Header extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('IBEX', style: TextStyle(fontWeight: FontWeight.w900)),
-                  Text(title, style: const TextStyle(fontSize: 12, color: Color(0xFF68736D))),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF68736D)),
+                  ),
                 ],
               ),
             ),
             const Chip(
+              visualDensity: VisualDensity.compact,
               avatar: Icon(Icons.shield_outlined, size: 16),
               label: Text('محلي وآمن'),
             ),
@@ -254,9 +337,24 @@ class _Header extends StatelessWidget {
 }
 
 class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.selected, required this.onSelect});
+  const _Sidebar({
+    required this.selected,
+    required this.onSelect,
+    required this.dismissOnSelect,
+  });
+
   final String selected;
   final ValueChanged<String> onSelect;
+  final bool dismissOnSelect;
+
+  void _select(BuildContext context, String section) {
+    if (dismissOnSelect) {
+      Navigator.of(context).pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) => onSelect(section));
+      return;
+    }
+    onSelect(section);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -270,30 +368,47 @@ class _Sidebar extends StatelessWidget {
       ('reports', Icons.bar_chart_rounded, 'التقارير'),
       ('settings', Icons.settings_outlined, 'الإعدادات'),
     ];
-    return Container(
+    return Material(
       color: const Color(0xFFF0F3F0),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          const ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Color(0xFF0D6B57),
-              child: Text('I', style: TextStyle(color: Colors.white)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            const ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Color(0xFF0D6B57),
+                child: Text('I', style: TextStyle(color: Colors.white)),
+              ),
+              title: Text('IBEX 2.0', style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('المالك المحلي'),
             ),
-            title: Text('IBEX 2.0', style: TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text('المالك المحلي'),
-          ),
-          const SizedBox(height: 8),
-          for (final item in items)
-            ListTile(
-              selected: selected == item.$1,
-              selectedTileColor: const Color(0xFFE3EEE9),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              leading: Icon(item.$2),
-              title: Text(item.$3),
-              onTap: () => onSelect(item.$1),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  for (final item in items)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: ListTile(
+                        selected: selected == item.$1,
+                        selectedTileColor: const Color(0xFFE3EEE9),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        leading: Icon(item.$2),
+                        title: Text(item.$3),
+                        trailing: selected == item.$1
+                            ? const Icon(Icons.check_rounded, size: 18)
+                            : null,
+                        onTap: () => _select(context, item.$1),
+                      ),
+                    ),
+                ],
+              ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
