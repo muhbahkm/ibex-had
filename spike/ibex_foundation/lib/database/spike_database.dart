@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 
+import 'master_data_tables.dart';
 import 'operational_drafts_table.dart';
 import 'spike_tables.dart';
 
@@ -20,6 +21,11 @@ part 'spike_database.g.dart';
     Payments,
     AuditLogs,
     OperationalDraftRecords,
+    Customers,
+    Products,
+    Units,
+    ProductUnits,
+    Warehouses,
   ],
 )
 class SpikeDatabase extends _$SpikeDatabase {
@@ -28,7 +34,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -42,6 +48,13 @@ class SpikeDatabase extends _$SpikeDatabase {
           }
           if (from < 3) {
             await m.createTable(operationalDraftRecords);
+          }
+          if (from < 4) {
+            await m.createTable(customers);
+            await m.createTable(products);
+            await m.createTable(units);
+            await m.createTable(productUnits);
+            await m.createTable(warehouses);
           }
         },
         beforeOpen: (_) async {
