@@ -13,6 +13,7 @@ class OperationalPermissions {
   static const transferStock = 'stock.transfer';
   static const postSaleReturn = 'sale_return.post';
   static const postPurchaseReturn = 'purchase_return.post';
+  static const postExpense = 'expense.post';
 }
 
 class AuthorizationService {
