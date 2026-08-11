@@ -27,7 +27,7 @@ class _Catalog implements SaleDraftCatalog {
       ];
 }
 
-CreateSaleDraftRequest _request() => CreateSaleDraftRequest(
+CreateSaleDraftRequest _request({String settlementMode = 'cash'}) => CreateSaleDraftRequest(
       draftId: 'draft-flow-1',
       customerQuery: 'محمد عبدالله باحكم',
       productQuery: 'سدر',
@@ -37,9 +37,10 @@ CreateSaleDraftRequest _request() => CreateSaleDraftRequest(
       currencyCode: 'YER',
       warehouseId: 'WH-1',
       createdAtUtc: DateTime.utc(2026, 8, 11, 10),
+      settlementMode: settlementMode,
     );
 
-const _postingContext = SalePostingContext(
+final _postingContext = SalePostingContext(
   operationId: 'op-workflow-1',
   businessId: 'B-1',
   userId: 'U-1',
@@ -90,7 +91,7 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('create approve and post persists lifecycle and commits canonical truth', () async {
+  test('create approve and post persists lifecycle and commits canonical cash truth', () async {
     final workflow = _workflow(db);
 
     final created = await workflow.create(_request());
@@ -107,6 +108,7 @@ void main() {
     );
     expect(result.documentNo, 'SAL-2026-000001');
     expect(result.idempotentReplay, isFalse);
+    expect(result.paymentId, isNotNull);
 
     final stored = await workflow.loadRequired(created.draftId);
     expect(stored.state, OperationalDraftState.posted);
@@ -115,11 +117,40 @@ void main() {
     expect((await db.select(db.journalLines).get()), hasLength(4));
     expect((await db.select(db.stockMovements).get()), hasLength(1));
     expect((await db.select(db.payments).get()), hasLength(1));
+    expect((await db.select(db.customerLedger).get()), isEmpty);
     expect((await db.select(db.auditLogs).get()), hasLength(1));
 
     final balance = await db.select(db.inventoryBalances).getSingle();
     expect(balance.quantityScaled, 9 * 1000000);
     expect(balance.inventoryValueScaled, 450 * 10000);
+  });
+
+  test('credit workflow posts receivable and customer ledger without cash payment', () async {
+    final workflow = _workflow(db);
+    final created = await workflow.create(_request(settlementMode: 'credit'));
+    await workflow.approve(created.draftId);
+
+    final result = await workflow.postApproved(
+      draftId: created.draftId,
+      context: _postingContext,
+    );
+    expect(result.paymentId, isNull);
+    expect(await db.select(db.payments).get(), isEmpty);
+
+    final sale = await db.select(db.sales).getSingle();
+    expect(sale.customerId, 'CUSTOMER-1');
+    expect(sale.settlementMode, 'credit');
+
+    final customerEntry = await db.select(db.customerLedger).getSingle();
+    expect(customerEntry.customerId, 'CUSTOMER-1');
+    expect(customerEntry.debitScaled, 80 * 10000);
+    expect(customerEntry.creditScaled, 0);
+
+    final journal = await db.select(db.journalLines).get();
+    expect(
+      journal.any((line) => line.accountId == 'ACC-AR' && line.baseDebitScaled == 80 * 10000),
+      isTrue,
+    );
   });
 
   test('posting failure leaves persisted draft approved and canonical truth untouched', () async {
@@ -146,6 +177,7 @@ void main() {
     expect(await db.select(db.journalEntries).get(), isEmpty);
     expect(await db.select(db.stockMovements).get(), isEmpty);
     expect(await db.select(db.payments).get(), isEmpty);
+    expect(await db.select(db.customerLedger).get(), isEmpty);
 
     final balance = await db.select(db.inventoryBalances).getSingle();
     expect(balance.quantityScaled, 10 * 1000000);
