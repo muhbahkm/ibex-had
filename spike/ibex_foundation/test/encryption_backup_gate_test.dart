@@ -39,6 +39,8 @@ void main() {
     );
     expect((await reopened.select(reopened.sales).get()).length, 1);
     expect((await reopened.select(reopened.journalEntries).get()).length, 1);
+    final sale = await reopened.select(reopened.sales).getSingle();
+    expect(sale.baseCurrencyCode, 'YER');
     final balance = await reopened.select(reopened.inventoryBalances).getSingle();
     expect(balance.quantityScaled, 8 * 1000000);
     await reopened.close();
@@ -77,9 +79,10 @@ void main() {
     final manifest = await backup.createClosedDatabaseBackup(
       sourceDatabase: dbFile,
       destinationDirectory: backupDir,
-      schemaVersion: 1,
+      schemaVersion: 2,
     );
     expect(manifest.databaseSha256, hasLength(64));
+    expect(manifest.schemaVersion, 2);
 
     await dbFile.delete();
     expect(await dbFile.exists(), isFalse);
@@ -100,6 +103,9 @@ void main() {
     expect((await restored.select(restored.payments).get()).length, 1);
     expect((await restored.select(restored.operationLog).get()).length, 1);
     expect((await restored.select(restored.auditLogs).get()).length, 1);
+
+    final restoredSale = await restored.select(restored.sales).getSingle();
+    expect(restoredSale.baseCurrencyCode, 'YER');
 
     final lines = await restored.select(restored.journalLines).get();
     final debit = lines.fold<int>(0, (sum, row) => sum + row.baseDebitScaled);
@@ -124,7 +130,7 @@ void main() {
     await backup.createClosedDatabaseBackup(
       sourceDatabase: dbFile,
       destinationDirectory: backupDir,
-      schemaVersion: 1,
+      schemaVersion: 2,
     );
 
     final backupDb = File('${backupDir.path}${Platform.pathSeparator}ibex.db.enc');
