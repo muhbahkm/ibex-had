@@ -1,3 +1,5 @@
+enum SaleSettlementMode { cash, credit }
+
 class PostSaleLineInput {
   const PostSaleLineInput({
     required this.productId,
@@ -26,6 +28,9 @@ class PostSaleCommand {
     required this.cogsLedgerAccountId,
     required this.saleAt,
     required this.lines,
+    this.customerId,
+    this.settlementMode = SaleSettlementMode.cash,
+    this.accountsReceivableLedgerAccountId = 'ACC-AR',
   });
 
   final String operationId;
@@ -40,6 +45,9 @@ class PostSaleCommand {
   final String salesRevenueAccountId;
   final String inventoryLedgerAccountId;
   final String cogsLedgerAccountId;
+  final String accountsReceivableLedgerAccountId;
+  final String? customerId;
+  final SaleSettlementMode settlementMode;
   final DateTime saleAt;
   final List<PostSaleLineInput> lines;
 }
@@ -58,6 +66,6 @@ class PostSaleResult {
   final String documentNo;
   final String journalEntryId;
   final String stockMovementId;
-  final String paymentId;
+  final String? paymentId;
   final bool idempotentReplay;
 }
