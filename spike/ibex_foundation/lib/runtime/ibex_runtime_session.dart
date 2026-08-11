@@ -16,6 +16,7 @@ import '../database/encrypted_database_opener.dart';
 import '../database/spike_database.dart';
 import '../finance/local_fx_rate_provider.dart';
 import '../operating_engine/pay_supplier_service.dart';
+import '../operating_engine/post_expense_service.dart';
 import '../operating_engine/post_purchase_return_service.dart';
 import '../operating_engine/post_purchase_service.dart';
 import '../operating_engine/post_sale_return_service.dart';
@@ -79,6 +80,7 @@ class IbexRuntimeSession {
         transferStock: TransferStockService(db),
         postSaleReturn: PostSaleReturnService(db),
         postPurchaseReturn: PostPurchaseReturnService(db),
+        postExpense: PostExpenseService(db),
       );
 
       final workflow = SaleOperationalWorkflow(
