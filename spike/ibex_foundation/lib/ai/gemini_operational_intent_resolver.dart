@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -87,7 +88,8 @@ $userText
         },
       };
       request.write(jsonEncode(payload));
-      final response = await request.close().timeout(const Duration(seconds: 20));
+      final response =
+          await request.close().timeout(const Duration(seconds: 20));
       final body = await utf8.decoder.bind(response).join();
       return GeminiIntentHttpResult(statusCode: response.statusCode, body: body);
     } finally {
@@ -186,13 +188,13 @@ class GeminiOperationalIntentResolver implements OperationalAiIntentResolver {
     switch (action) {
       case AiOperationalAction.createSale:
         return _hasAll(args, const [
-          'customer',
-          'product',
-          'unit',
-          'quantity',
-          'unit_price',
-          'currency',
-        ]) &&
+              'customer',
+              'product',
+              'unit',
+              'quantity',
+              'unit_price',
+              'currency',
+            ]) &&
             (!args.containsKey('settlement_mode') ||
                 args['settlement_mode'] == 'cash' ||
                 args['settlement_mode'] == 'credit');
