@@ -7,6 +7,11 @@ class CustomerBalanceReadIntent extends OperationalReadIntent {
   final String customerQuery;
 }
 
+class SupplierBalanceReadIntent extends OperationalReadIntent {
+  const SupplierBalanceReadIntent(this.supplierQuery);
+  final String supplierQuery;
+}
+
 class InventoryBalanceReadIntent extends OperationalReadIntent {
   const InventoryBalanceReadIntent(this.productQuery);
   final String productQuery;
@@ -22,6 +27,21 @@ class OperationalReadIntentInterpreter {
   OperationalReadIntent interpret(String input) {
     final text = input.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (text.isEmpty) return const UnsupportedOperationalReadIntent();
+
+    final supplierQuery = _extractAfterPrefixes(
+      text,
+      const [
+        'كم رصيد المورد',
+        'ما رصيد المورد',
+        'اعرض رصيد المورد',
+        'أعرض رصيد المورد',
+        'كم علينا للمورد',
+        'ما علينا للمورد',
+      ],
+    );
+    if (supplierQuery != null) {
+      return SupplierBalanceReadIntent(supplierQuery);
+    }
 
     final customerQuery = _extractAfterPrefixes(
       text,
@@ -60,7 +80,7 @@ class OperationalReadIntentInterpreter {
       if (!text.startsWith(prefix)) continue;
       var value = text.substring(prefix.length).trim();
       value = value
-          .replaceFirst(RegExp(r'^(?:العميل|الزبون|الصنف)\s+'), '')
+          .replaceFirst(RegExp(r'^(?:العميل|الزبون|المورد|الصنف)\s+'), '')
           .replaceFirst(RegExp(r'[؟?!.،,]+$'), '')
           .trim();
       if (value.isNotEmpty) return value;
