@@ -2,21 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ibex_foundation_spike/ui/ibex_chat_shell.dart';
 
-Future<void> pumpPhoneViewport(
-  WidgetTester tester,
-  Widget app,
-) async {
-  tester.view.physicalSize = const Size(1080, 2400);
-  tester.view.devicePixelRatio = 2.5;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(app);
+Future<void> _scrollPrimaryListToBottom(WidgetTester tester) async {
+  final list = find.byType(ListView);
+  expect(list, findsOneWidget);
+  await tester.drag(list, const Offset(0, -900));
   await tester.pumpAndSettle();
 }
 
 void main() {
   testWidgets('chat-first shell renders Arabic RTL sale draft preview', (tester) async {
-    await pumpPhoneViewport(tester, const IbexVisualApp());
+    await tester.binding.setSurfaceSize(const Size(432, 960));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const IbexVisualApp());
+    await tester.pumpAndSettle();
 
     expect(find.text('ماذا تريد أن تنجز اليوم؟'), findsOneWidget);
     expect(find.text('مسودة فاتورة بيع'), findsOneWidget);
@@ -29,25 +28,22 @@ void main() {
   });
 
   testWidgets('approval and material edit visibly require a new review state', (tester) async {
-    await pumpPhoneViewport(tester, const IbexVisualApp());
+    await tester.binding.setSurfaceSize(const Size(432, 960));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const IbexVisualApp());
+    await tester.pumpAndSettle();
+    await _scrollPrimaryListToBottom(tester);
 
     final approve = find.text('اعتماد');
-    await tester.scrollUntilVisible(
-      approve,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
+    expect(approve, findsOneWidget);
     await tester.tap(approve);
     await tester.pumpAndSettle();
     expect(find.text('تمت الموافقة'), findsOneWidget);
     expect(find.text('موافق عليها'), findsOneWidget);
 
     final edit = find.text('تعديل');
-    await tester.scrollUntilVisible(
-      edit,
-      120,
-      scrollable: find.byType(Scrollable).first,
-    );
+    expect(edit, findsOneWidget);
     await tester.tap(edit);
     await tester.pumpAndSettle();
     expect(find.text('تحتاج مراجعة جديدة'), findsOneWidget);
@@ -55,22 +51,20 @@ void main() {
   });
 
   testWidgets('composer accepts Arabic operational text without posting truth', (tester) async {
-    await pumpPhoneViewport(tester, const IbexVisualApp());
+    await tester.binding.setSurfaceSize(const Size(432, 960));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const IbexVisualApp());
+    await tester.pumpAndSettle();
 
     const message = 'اعرض مخزون السدر في المستودع الرئيسي';
     final composer = find.byKey(const ValueKey('ibex-composer'));
-    await tester.ensureVisible(composer);
     await tester.enterText(composer, message);
     await tester.tap(find.byKey(const ValueKey('ibex-send')));
     await tester.pumpAndSettle();
+    await _scrollPrimaryListToBottom(tester);
 
-    final messageFinder = find.text(message);
-    await tester.scrollUntilVisible(
-      messageFinder,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(messageFinder, findsOneWidget);
+    expect(find.text(message), findsOneWidget);
     expect(find.textContaining('هذه نسخة بصرية تجريبية'), findsOneWidget);
   });
 }
