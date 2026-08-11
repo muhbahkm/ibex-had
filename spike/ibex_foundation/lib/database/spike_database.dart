@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 
+import 'authorization_tables.dart';
 import 'customer_receipts_table.dart';
 import 'master_data_tables.dart';
 import 'operational_drafts_table.dart';
@@ -41,6 +42,10 @@ part 'spike_database.g.dart';
     SupplierPayments,
     AuditLogs,
     OperationalDraftRecords,
+    AppUsers,
+    Roles,
+    UserRoles,
+    RolePermissions,
     Customers,
     Suppliers,
     Products,
@@ -55,7 +60,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -64,12 +69,8 @@ class SpikeDatabase extends _$SpikeDatabase {
           await customStatement('PRAGMA foreign_keys = ON');
         },
         onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            await m.addColumn(sales, sales.baseCurrencyCode);
-          }
-          if (from < 3) {
-            await m.createTable(operationalDraftRecords);
-          }
+          if (from < 2) await m.addColumn(sales, sales.baseCurrencyCode);
+          if (from < 3) await m.createTable(operationalDraftRecords);
           if (from < 4) {
             await m.createTable(customers);
             await m.createTable(products);
@@ -82,9 +83,7 @@ class SpikeDatabase extends _$SpikeDatabase {
             await m.addColumn(sales, sales.settlementMode);
             await m.createTable(customerLedger);
           }
-          if (from < 6) {
-            await m.createTable(customerReceipts);
-          }
+          if (from < 6) await m.createTable(customerReceipts);
           if (from < 7) {
             await m.createTable(suppliers);
             await m.createTable(purchases);
@@ -92,9 +91,7 @@ class SpikeDatabase extends _$SpikeDatabase {
             await m.createTable(purchasePayments);
             await m.createTable(supplierLedger);
           }
-          if (from < 8) {
-            await m.createTable(supplierPayments);
-          }
+          if (from < 8) await m.createTable(supplierPayments);
           if (from < 9) {
             await m.createTable(stockTransfers);
             await m.createTable(stockTransferItems);
@@ -108,6 +105,12 @@ class SpikeDatabase extends _$SpikeDatabase {
             await m.createTable(purchaseReturns);
             await m.createTable(purchaseReturnItems);
             await m.createTable(purchaseReturnCashReceipts);
+          }
+          if (from < 12) {
+            await m.createTable(appUsers);
+            await m.createTable(roles);
+            await m.createTable(userRoles);
+            await m.createTable(rolePermissions);
           }
         },
         beforeOpen: (_) async {
