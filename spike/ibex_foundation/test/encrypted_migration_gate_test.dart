@@ -20,7 +20,7 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
-  test('encrypted v1 database migrates to v2 without inventing historical base currency', () async {
+  test('encrypted v1 database migrates through v3 without inventing historical base currency', () async {
     _createEncryptedV1Snapshot(dbFile, key);
 
     final beforeHeader = await dbFile.openRead(0, 16).fold<List<int>>(<int>[], (a, b) => a..addAll(b));
@@ -40,10 +40,15 @@ void main() {
     expect(sale.baseTotalScaled, 375 * 10000);
 
     final version = await migrated.customSelect('PRAGMA user_version').getSingle();
-    expect(version.data.values.single, 2);
+    expect(version.data.values.single, 3);
 
     final columns = await migrated.customSelect('PRAGMA table_info(sales)').get();
     expect(columns.any((row) => row.data['name'] == 'base_currency_code'), isTrue);
+
+    final draftTables = await migrated.customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'operational_draft_records'",
+    ).get();
+    expect(draftTables, hasLength(1));
 
     await migrated.close();
 
