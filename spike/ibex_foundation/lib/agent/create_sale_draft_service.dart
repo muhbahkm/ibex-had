@@ -44,6 +44,7 @@ class CreateSaleDraftRequest {
     required this.currencyCode,
     required this.warehouseId,
     required this.createdAtUtc,
+    this.settlementMode = 'credit',
   });
 
   final String draftId;
@@ -55,6 +56,7 @@ class CreateSaleDraftRequest {
   final String currencyCode;
   final String warehouseId;
   final DateTime createdAtUtc;
+  final String settlementMode;
 }
 
 class CreateSaleDraftService {
@@ -72,6 +74,13 @@ class CreateSaleDraftService {
     registry.requireRegistered(commandName);
     _requireNonBlank(request.draftId, 'DRAFT_ID_REQUIRED');
     _requireNonBlank(request.warehouseId, 'WAREHOUSE_REQUIRED');
+    final settlementMode = request.settlementMode.trim().toLowerCase();
+    if (settlementMode != 'cash' && settlementMode != 'credit') {
+      throw const DomainError(
+        'SALE_SETTLEMENT_MODE_INVALID',
+        'Sale settlement mode must be cash or credit.',
+      );
+    }
 
     final customer = _resolveOne<SaleDraftCustomer>(
       await catalog.findCustomers(request.customerQuery.trim()),
@@ -116,6 +125,7 @@ class CreateSaleDraftService {
       'customer_name': customer.name,
       'warehouse_id': request.warehouseId.trim(),
       'currency_code': unitPrice.currencyCode,
+      'settlement_mode': settlementMode,
       'lines': [
         {
           'product_id': product.id,
