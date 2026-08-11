@@ -3,7 +3,16 @@
 Last updated: 2026-08-11
 
 ## Current Phase
-**V1 Domain/Schema Freeze Candidate 2 complete enough for isolated Android technical-spike execution. Production application scaffold has not started.**
+**Executable Android/domain spike is green on Foundation + Android Runtime at the same tested head; production hardening is active. Production application is NOT production-approved.**
+
+## Current Executable Evidence
+- Accepted executable head: `31e3d8ab44986b6f62ac0f33cae8166afad33191`.
+- Foundation run `31514943699`: success (Drift generation, analyzer, full Flutter tests, encrypted migration through schema v13).
+- Android Runtime run `31514943707`: success (debug APK, artifact publication, KVM emulator, encrypted persistence integration test).
+- Schema target is currently v13, including authorization tables and persisted `fx_rates`.
+- Sales, purchases, customer receipts, supplier payments, stock transfers, sales returns, purchase returns, operational drafts/read queries and core encrypted backup/restore are executable spike slices.
+- Authorization infrastructure exists but must be enforced on every state-changing application/Operating Engine entry point before production approval.
+- Persisted FX infrastructure exists, but synthetic/default FX behavior must be removed from production runtime and posting previews must bind to business-configured date-scoped rate snapshots.
 
 ## Completed
 - Legacy repository inspected and production Supabase project `IBEX_26` identified.
@@ -29,6 +38,7 @@ Last updated: 2026-08-11
 - ADR-015 accepted: fixed canonical quantity scale 1e6 with unit precision policy 0..6 decimals.
 - ADR-016 accepted: application-owned transactional visible document numbering; UUID remains canonical identity.
 - All five former physical-schema clarifications are closed.
+- Same-head Foundation + Android Runtime continuation gate proven green on 2026-08-11.
 
 ## Current Constraints
 - Production Supabase: **READ ONLY**.
@@ -37,7 +47,7 @@ Last updated: 2026-08-11
 - Arabic RTL first.
 - Latin digits only (`0-9`).
 - Calm/premium/minimal design language.
-- Noto Sans Arabic + Noto Sans baseline pending device validation.
+- Noto Sans Arabic + Noto Sans baseline pending representative-device validation.
 - No UI, report, dashboard, import, sync, automation, repository adapter, or future AI component may create competing financial/inventory/settlement/document-lifecycle/permission truth.
 - No new production phase advances unless previous phase gates and regression checks pass.
 
@@ -79,23 +89,22 @@ Minimal tax registration and posted snapshot fields exist, but `tax_enabled=fals
 `document_sequences` allocates business/document/year scoped numbers transactionally, with defaults such as `SAL-2026-000001`; UUID remains canonical identity.
 
 ## Technical Spike
-The next executable work is an isolated spike, not the production scaffold.
+The isolated spike has progressed beyond the original minimum PostSale validation into executable domain/runtime slices. It remains the hardening vehicle until the remaining production gates are closed.
 
-Planned validation:
-- Flutter Android;
-- Drift + SQLite;
-- encrypted SQLite candidate;
-- Android Keystore key protection;
-- encrypted migration + backup/restore;
+Validated so far:
+- Flutter Android build path;
+- Drift + SQLite + sqlite3mc encrypted runtime;
+- secure-storage-backed key flow in the tested emulator lifecycle;
+- encrypted migrations through schema v13;
+- encrypted backup/restore round trip;
 - Money/Quantity/FX value objects;
-- minimal local `PostSale` vertical slice proving authorization, stock validation, sale + journal + stock + payment/allocation + operation log + audit under one transaction and rollback;
-- stock-transfer paired movement transaction test;
-- return quantity ceiling / compensating movement test;
-- transactional document-sequence rollback test;
-- Noto + RTL + Latin digits + approved motion/design language;
-- barcode baseline;
-- 58mm/80mm thermal print baseline;
-- performance evidence.
+- atomic/idempotent sales and purchase flows;
+- customer receipt and supplier payment flows;
+- stock-transfer paired movement transaction behavior;
+- immutable sales/purchase returns and quantity ceilings;
+- transactional document-sequence rollback behavior;
+- Chat-first Arabic RTL prototype and typed sale draft lifecycle;
+- persisted authorization and FX schema foundations.
 
 Target branch: `spike/android-foundation-v1`.
 
@@ -119,18 +128,23 @@ Target branch: `spike/android-foundation-v1`.
 - `docs/ENCRYPTION_SPIKE_CRITERIA.md`
 - `docs/DESIGN_SYSTEM.md`
 
-## Remaining Gates Before Production Scaffold
-1. Execute isolated Android technical spike with synthetic data only.
-2. Validate encrypted SQLite + Android Keystore.
-3. Validate Drift migrations under encryption.
-4. Validate backup/restore round trip.
-5. Validate critical Operating Engine/domain invariants as executable tests.
-6. Validate document sequence, return, and transfer behavior under rollback/retry.
-7. Validate Noto/RTL/Latin-digit UI direction and motion.
-8. Validate thermal printing and barcode baseline.
-9. Validate representative Android performance.
-10. Complete legacy migration reconciliation validation.
-11. Only then issue final V1 Domain/Schema Freeze and scaffold the production IBEX 2.0 application.
+## Remaining Production-Hardening Gates
+1. Enforce authorization/permissions before every state-changing command reaches mutation logic.
+2. Replace synthetic/default FX with persisted business-configured, date-scoped rates and bind the exact rate snapshot into previews/posts.
+3. Complete purchase-return edge-case and rollback coverage.
+4. Add expense/cash movement engine.
+5. Add reversal/correction commands for posted documents.
+6. Add production read models/reports.
+7. Route purchases/payments/transfers/returns through typed conversational drafts/cards with explicit approval.
+8. Make document date/year allocation use deterministic business calendar/timezone policy.
+9. Validate encryption, Keystore/secure-storage, process-kill, reboot/upgrade/reinstall behavior on representative physical Android devices.
+10. Create production Android host, harden manifest/backup policy, configure release signing, and prove signed release builds.
+11. Disable spike seed data and synthetic defaults from production runtime.
+12. Add production backup/restore UX with destructive confirmation and reconciliation.
+13. Complete security/privacy/dependency hardening and representative release smoke/performance testing.
+14. Validate thermal printing + barcode hardware baseline and representative-device UX/performance.
+15. Complete legacy migration mapping/reconciliation validation before any separately authorized import.
+16. Confirm no known P0/P1 defects before declaring production readiness.
 
 ## Resume Protocol
-Use `IBEX2-CONTINUE` in a new conversation, then read `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `docs/PHYSICAL_SCHEMA_DECISIONS_V1.md`, `docs/FULL_CROSS_REVIEW_V1.md`, `docs/TECHNICAL_SPIKE_PLAN_V1.md`, `docs/DATABASE_SCHEMA_V1.md`, `docs/OPERATING_ENGINE_V1.md`, `docs/COMMAND_TRACEABILITY_V1.md`, `docs/CENTRAL_MODULES_CATALOG_V1.md`, `docs/OWNERSHIP_TRACEABILITY_V1.md`, `docs/DOCUMENT_LIFECYCLE_V1.md`, `docs/DOMAIN_ERROR_CATALOG_V1.md`, `docs/DESIGN_SYSTEM.md`, and active acceptance/posting/inventory artifacts before taking action.
+Use `IBEX2-CONTINUE` in a new conversation, then read `spike/CURRENT_HANDOFF.md`, `PROJECT_CONTEXT.md`, this file, `docs/DECISIONS.md`, `spike/SPIKE_EXECUTION_LOG.md`, and the active acceptance/posting/inventory artifacts before taking action. Production Supabase remains read-only.
