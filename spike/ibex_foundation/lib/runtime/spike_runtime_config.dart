@@ -1,5 +1,3 @@
-import '../core/errors/domain_error.dart';
-
 class SpikeRuntimeConfig {
   const SpikeRuntimeConfig({
     this.businessId = 'B-LOCAL-DEMO',
@@ -24,32 +22,4 @@ class SpikeRuntimeConfig {
   final String inventoryLedgerAccountId;
   final String cogsLedgerAccountId;
   final String accountsReceivableLedgerAccountId;
-}
-
-class SpikeSyntheticFxRateProvider {
-  const SpikeSyntheticFxRateProvider();
-
-  /// Synthetic values exist only so the disposable visual/runtime spike can
-  /// exercise multi-currency posting end-to-end. Production must replace this
-  /// provider with business-configured, date-scoped rates and show the snapshot
-  /// in the approval preview.
-  int rateScaled({required String from, required String to}) {
-    final source = from.trim().toUpperCase();
-    final target = to.trim().toUpperCase();
-    if (source == target) return 100000000;
-    if (target != 'YER') {
-      throw const DomainError(
-        'FX_RATE_NOT_CONFIGURED',
-        'Spike FX provider only targets YER base currency.',
-      );
-    }
-    return switch (source) {
-      'SAR' => 425 * 100000000,
-      'USD' => 1600 * 100000000,
-      _ => throw const DomainError(
-          'FX_RATE_NOT_CONFIGURED',
-          'No explicit spike FX rate exists for this currency.',
-        ),
-    };
-  }
 }
