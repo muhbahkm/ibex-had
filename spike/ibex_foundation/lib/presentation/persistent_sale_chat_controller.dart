@@ -167,6 +167,27 @@ class PersistentSaleChatController extends SaleChatController {
               text: 'الرصيد الحالي للعميل ${result.customerName}: $balances. هذه قراءة مباشرة من دفتر العميل المحلي ولم تُنشئ أي قيد أو حركة.',
             ),
           );
+        case SupplierBalanceReadIntent():
+          final result = await queries.supplierBalance(intent.supplierQuery);
+          if (result.balances.isEmpty) {
+            _runtimeMessages.add(
+              SaleChatMessage(
+                role: 'assistant',
+                text: 'المستحق الحالي للمورد ${result.supplierName}: 0. لا توجد ذمة مستحقة مسجلة في دفتر المورد المحلي.',
+              ),
+            );
+            return;
+          }
+          final balances = result.balances
+              .map((balance) =>
+                  '${_formatMoneyScaled(balance.balanceScaled)} ${balance.currencyCode}')
+              .join('، ');
+          _runtimeMessages.add(
+            SaleChatMessage(
+              role: 'assistant',
+              text: 'المستحق الحالي للمورد ${result.supplierName}: $balances. هذه قراءة مباشرة من دفتر المورد المحلي ولم تُنشئ أي قيد أو دفعة.',
+            ),
+          );
         case InventoryBalanceReadIntent():
           final result = await queries.inventoryBalance(intent.productQuery);
           final balance = result.balance;
