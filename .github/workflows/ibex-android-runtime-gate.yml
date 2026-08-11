@@ -1,0 +1,60 @@
+name: IBEX Android Runtime Gate
+
+on:
+  push:
+    branches:
+      - spike/android-foundation-v1
+    paths:
+      - 'spike/ibex_foundation/**'
+      - '.github/workflows/ibex-android-runtime-gate.yml'
+  workflow_dispatch:
+
+jobs:
+  android-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies and generate Drift code
+        working-directory: spike/ibex_foundation
+        run: |
+          flutter pub get
+          dart run build_runner build
+
+      - name: Generate disposable Android host
+        working-directory: spike/ibex_foundation
+        run: |
+          rm -rf /tmp/ibex_android_host android
+          flutter create --platforms=android --org com.ibex.had --project-name ibex_foundation_spike /tmp/ibex_android_host
+          cp -R /tmp/ibex_android_host/android ./android
+
+      - name: Verify Android debug build
+        working-directory: spike/ibex_foundation
+        run: flutter build apk --debug
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run encrypted persistence gate on Android emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          working-directory: spike/ibex_foundation
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: flutter test integration_test/android_runtime_gate_test.dart -d emulator-${EMULATOR_PORT}
