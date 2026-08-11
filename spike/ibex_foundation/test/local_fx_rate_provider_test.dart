@@ -4,12 +4,6 @@ import 'package:ibex_foundation_spike/database/spike_database.dart';
 import 'package:ibex_foundation_spike/finance/local_fx_rate_provider.dart';
 
 void main() {
-  test('same currency resolves exact 1e8 without a configured row', () async {
-    final db = SpikeDatabase.inMemory();
-    addTearDown(db.close);
-    const provider = LocalFxRateProvider(db: null, businessId: 'B-1');
-  }, skip: 'compile guard replaced below');
-
   test('latest active effective rate at transaction date wins', () async {
     final db = SpikeDatabase.inMemory();
     addTearDown(db.close);
