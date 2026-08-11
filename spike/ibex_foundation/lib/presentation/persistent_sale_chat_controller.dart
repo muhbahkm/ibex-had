@@ -5,6 +5,8 @@ import '../agent/operational_draft.dart';
 import '../agent/sale_intent_interpreter.dart';
 import '../agent/sale_operational_workflow.dart';
 import '../core/errors/domain_error.dart';
+import '../queries/operational_read_intent_interpreter.dart';
+import '../queries/operational_read_query_service.dart';
 import 'sale_chat_controller.dart';
 
 class PersistentSaleChatController extends SaleChatController {
@@ -12,8 +14,12 @@ class PersistentSaleChatController extends SaleChatController {
     required this.workflow,
     required this.postingContextFactory,
     this.defaultWarehouseId = 'WH-1',
+    this.readQueries,
     SaleIntentInterpreter interpreter = const SaleIntentInterpreter(),
+    OperationalReadIntentInterpreter readInterpreter =
+        const OperationalReadIntentInterpreter(),
   })  : _interpreter = interpreter,
+        _readInterpreter = readInterpreter,
         super(
           createSaleDraft: workflow.createSaleDraft,
           workflow: workflow,
@@ -24,7 +30,9 @@ class PersistentSaleChatController extends SaleChatController {
   final SaleOperationalWorkflow workflow;
   final SalePostingContextFactory postingContextFactory;
   final String defaultWarehouseId;
+  final OperationalReadQueryService? readQueries;
   final SaleIntentInterpreter _interpreter;
+  final OperationalReadIntentInterpreter _readInterpreter;
 
   OperationalDraft? _runtimeDraft;
   bool _runtimeBusy = false;
@@ -74,7 +82,7 @@ class PersistentSaleChatController extends SaleChatController {
   Future<void> initializeDemoDraft() => initialize();
 
   @override
-  void approve() => unawaited(_runDraftMutation(() async {
+  void approve() => unawaited(_runOperation(() async {
         final current = _requireDraft();
         _runtimeDraft = await workflow.approve(current.draftId);
         _runtimeMessages.add(
@@ -86,7 +94,7 @@ class PersistentSaleChatController extends SaleChatController {
       }));
 
   @override
-  void cancel() => unawaited(_runDraftMutation(() async {
+  void cancel() => unawaited(_runOperation(() async {
         final current = _requireDraft();
         _runtimeDraft = await workflow.cancel(current.draftId);
         _runtimeMessages.add(
@@ -101,7 +109,7 @@ class PersistentSaleChatController extends SaleChatController {
   void requestEditTo400() => revisePrice('400');
 
   @override
-  void revisePrice(String priceText) => unawaited(_runDraftMutation(() async {
+  void revisePrice(String priceText) => unawaited(_runOperation(() async {
         final current = _requireDraft();
         _runtimeDraft = await workflow.revisePrice(current.draftId, priceText);
         _runtimeMessages.add(
@@ -118,11 +126,76 @@ class PersistentSaleChatController extends SaleChatController {
     if (value.isEmpty || _runtimeBusy) return;
     _runtimeMessages.add(SaleChatMessage(role: 'user', text: value));
     notifyListeners();
-    unawaited(_executeIntent(value));
+
+    final readIntent = _readInterpreter.interpret(value);
+    if (readIntent is! UnsupportedOperationalReadIntent && readQueries != null) {
+      unawaited(_executeReadIntent(readIntent));
+      return;
+    }
+    unawaited(_executeSaleIntent(value));
   }
 
-  Future<void> _executeIntent(String value) async {
-    await _runDraftMutation(() async {
+  Future<void> _executeReadIntent(OperationalReadIntent intent) async {
+    await _runOperation(() async {
+      final queries = readQueries;
+      if (queries == null) {
+        throw const DomainError(
+          'READ_QUERY_SERVICE_UNAVAILABLE',
+          'Local operational read service is not configured.',
+        );
+      }
+
+      switch (intent) {
+        case CustomerBalanceReadIntent():
+          final result = await queries.customerBalance(intent.customerQuery);
+          if (result.balances.isEmpty) {
+            _runtimeMessages.add(
+              SaleChatMessage(
+                role: 'assistant',
+                text: 'رصيد ${result.customerName}: 0. لا توجد حركة مدينة أو دائنة مسجلة في دفتر العميل المحلي.',
+              ),
+            );
+            return;
+          }
+          final balances = result.balances
+              .map((balance) =>
+                  '${_formatMoneyScaled(balance.balanceScaled)} ${balance.currencyCode}')
+              .join('، ');
+          _runtimeMessages.add(
+            SaleChatMessage(
+              role: 'assistant',
+              text: 'الرصيد الحالي للعميل ${result.customerName}: $balances. هذه قراءة مباشرة من دفتر العميل المحلي ولم تُنشئ أي قيد أو حركة.',
+            ),
+          );
+        case InventoryBalanceReadIntent():
+          final result = await queries.inventoryBalance(intent.productQuery);
+          final balance = result.balance;
+          if (balance == null) {
+            _runtimeMessages.add(
+              SaleChatMessage(
+                role: 'assistant',
+                text: 'لا يوجد رصيد مخزني مسجل للصنف ${result.productName} في المستودع المحدد.',
+              ),
+            );
+            return;
+          }
+          _runtimeMessages.add(
+            SaleChatMessage(
+              role: 'assistant',
+              text: 'مخزون ${result.productName}: ${_formatQuantityScaled(balance.quantityScaled)} وحدة أساسية. متوسط التكلفة الدفتري ${_formatMoneyScaled(balance.wacUnitCostScaled)} بعملة الأساس. هذه قراءة محلية فقط.',
+            ),
+          );
+        case UnsupportedOperationalReadIntent():
+          throw const DomainError(
+            'READ_INTENT_UNSUPPORTED',
+            'Unsupported operational read intent.',
+          );
+      }
+    });
+  }
+
+  Future<void> _executeSaleIntent(String value) async {
+    await _runOperation(() async {
       final intent = _interpreter.interpret(value);
       switch (intent) {
         case CreateSaleConversationIntent():
@@ -219,7 +292,7 @@ class PersistentSaleChatController extends SaleChatController {
     });
   }
 
-  Future<void> _runDraftMutation(Future<void> Function() action) async {
+  Future<void> _runOperation(Future<void> Function() action) async {
     if (_runtimeBusy) return;
     _runtimeBusy = true;
     _runtimeError = null;
@@ -246,6 +319,23 @@ class PersistentSaleChatController extends SaleChatController {
       _runtimeBusy = false;
       notifyListeners();
     }
+  }
+
+  String _formatMoneyScaled(int scaled) => _formatScaled(scaled, 10000, 4);
+
+  String _formatQuantityScaled(int scaled) => _formatScaled(scaled, 1000000, 6);
+
+  String _formatScaled(int scaled, int scale, int decimals) {
+    final negative = scaled < 0;
+    final absolute = scaled.abs();
+    final whole = absolute ~/ scale;
+    final remainder = absolute % scale;
+    if (remainder == 0) return '${negative ? '-' : ''}$whole';
+    final fraction = remainder
+        .toString()
+        .padLeft(decimals, '0')
+        .replaceFirst(RegExp(r'0+$'), '');
+    return '${negative ? '-' : ''}$whole.$fraction';
   }
 
   OperationalDraft _requireDraft() {
