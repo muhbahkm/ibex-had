@@ -104,6 +104,6 @@ void _createEncryptedV1Snapshot(File file, String key) {
     ]);
     raw.execute('PRAGMA user_version = 1;');
   } finally {
-    raw.dispose();
+    raw.close();
   }
 }
