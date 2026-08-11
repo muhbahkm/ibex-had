@@ -44,6 +44,9 @@ class Sales extends Table {
   TextColumn get documentNo => text()();
   TextColumn get warehouseId => text()();
   TextColumn get currencyCode => text()();
+  // Added in schema v2. Historical v1 rows remain NULL until a trusted
+  // migration/reconciliation source can prove the original base currency.
+  TextColumn get baseCurrencyCode => text().nullable()();
   IntColumn get exchangeRateScaled => integer()();
   IntColumn get totalScaled => integer()();
   IntColumn get baseTotalScaled => integer()();
