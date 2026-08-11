@@ -14,12 +14,19 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   path_provider: ^2.1.6
   uuid: ^4.6.0
+  crypto: ^3.0.7
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   drift_dev: ^2.34.3
   build_runner: ^2.7.0
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
 
 flutter:
   uses-material-design: true
