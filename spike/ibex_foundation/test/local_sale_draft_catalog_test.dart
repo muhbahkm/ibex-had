@@ -79,12 +79,15 @@ void main() {
     final byName = await catalog.findProducts('سدر عبوة');
     expect(byName.single.id, 'P-1');
 
+    final byArticleName = await catalog.findProducts('السدر عبوة كيلو');
+    expect(byArticleName.single.id, 'P-1');
+
     final bySku = await catalog.findProducts('SIDR-1KG');
     expect(bySku.single.id, 'P-1');
   });
 
-  test('unit resolution is restricted to units configured for product', () async {
-    final units = await catalog.findUnitsForProduct('P-1', 'جالون');
+  test('unit resolution tolerates the Arabic definite article and stays product scoped', () async {
+    final units = await catalog.findUnitsForProduct('P-1', 'الجالون');
     expect(units, hasLength(1));
     expect(units.single.quantityPrecision, 0);
 
