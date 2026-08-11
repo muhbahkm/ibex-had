@@ -35,6 +35,20 @@ class PostSaleService {
     if (command.exchangeRateScaled <= 0) {
       throw const DomainError('FX_RATE_INVALID', 'Exchange rate must be positive.');
     }
+    if (command.settlementMode == SaleSettlementMode.credit &&
+        (command.customerId == null || command.customerId!.trim().isEmpty)) {
+      throw const DomainError(
+        'SALE_CREDIT_CUSTOMER_REQUIRED',
+        'Credit sale requires an explicit customer.',
+      );
+    }
+    if (command.settlementMode == SaleSettlementMode.credit &&
+        command.accountsReceivableLedgerAccountId.trim().isEmpty) {
+      throw const DomainError(
+        'SALE_AR_ACCOUNT_REQUIRED',
+        'Credit sale requires an accounts receivable ledger account.',
+      );
+    }
 
     final currency = _normalizeCurrency(command.currencyCode, 'MONEY_CURRENCY_INVALID');
     final baseCurrency = _normalizeCurrency(command.baseCurrencyCode, 'BASE_CURRENCY_INVALID');
@@ -56,13 +70,13 @@ class PostSaleService {
         }
         final existingPayment = await (db.select(db.payments)
               ..where((t) => t.operationId.equals(command.operationId)))
-            .getSingle();
+            .getSingleOrNull();
         return PostSaleResult(
           saleId: existingSale.id,
           documentNo: existingSale.documentNo,
           journalEntryId: existingSale.journalEntryId,
           stockMovementId: existingSale.stockMovementId,
-          paymentId: existingPayment.id,
+          paymentId: existingPayment?.id,
           idempotentReplay: true,
         );
       }
@@ -70,7 +84,7 @@ class PostSaleService {
       final saleId = _uuid.v4();
       final journalId = _uuid.v4();
       final movementId = _uuid.v4();
-      final paymentId = _uuid.v4();
+      final paymentId = command.settlementMode == SaleSettlementMode.cash ? _uuid.v4() : null;
       final now = DateTime.now().toUtc();
 
       final rate = ExchangeRate.fromScaled(
@@ -152,6 +166,8 @@ class PostSaleService {
               businessId: command.businessId,
               documentNo: documentNo,
               warehouseId: command.warehouseId,
+              customerId: Value(command.customerId),
+              settlementMode: Value(command.settlementMode.name),
               currencyCode: currency,
               baseCurrencyCode: Value(baseCurrency),
               exchangeRateScaled: command.exchangeRateScaled,
@@ -240,13 +256,19 @@ class PostSaleService {
             ),
           );
 
+      final settlementDebitAccount = command.settlementMode == SaleSettlementMode.cash
+          ? command.cashLedgerAccountId
+          : command.accountsReceivableLedgerAccountId;
+      final settlementDescription = command.settlementMode == SaleSettlementMode.cash
+          ? 'Cash sale receipt'
+          : 'Customer receivable';
       final journalLines = [
         JournalLinesCompanion.insert(
           id: _uuid.v4(),
           journalEntryId: journalId,
-          accountId: command.cashLedgerAccountId,
+          accountId: settlementDebitAccount,
           baseDebitScaled: Value(baseSaleMoney.scaled),
-          description: const Value('Cash sale receipt'),
+          description: Value(settlementDescription),
         ),
         JournalLinesCompanion.insert(
           id: _uuid.v4(),
@@ -286,19 +308,36 @@ class PostSaleService {
         throw const DomainError('ACC_ENTRY_UNBALANCED', 'Journal entry is not balanced.');
       }
 
-      await db.into(db.payments).insert(
-            PaymentsCompanion.insert(
-              id: paymentId,
-              businessId: command.businessId,
-              saleId: saleId,
-              cashAccountId: command.cashAccountId,
-              currencyCode: currency,
-              amountScaled: saleTotalScaled,
-              baseAmountScaled: baseSaleMoney.scaled,
-              paymentAt: command.saleAt.toUtc(),
-              operationId: command.operationId,
-            ),
-          );
+      if (command.settlementMode == SaleSettlementMode.cash) {
+        await db.into(db.payments).insert(
+              PaymentsCompanion.insert(
+                id: paymentId!,
+                businessId: command.businessId,
+                saleId: saleId,
+                cashAccountId: command.cashAccountId,
+                currencyCode: currency,
+                amountScaled: saleTotalScaled,
+                baseAmountScaled: baseSaleMoney.scaled,
+                paymentAt: command.saleAt.toUtc(),
+                operationId: command.operationId,
+              ),
+            );
+      } else {
+        await db.into(db.customerLedger).insert(
+              CustomerLedgerCompanion.insert(
+                id: _uuid.v4(),
+                businessId: command.businessId,
+                customerId: command.customerId!,
+                sourceType: 'sale',
+                sourceId: saleId,
+                currencyCode: currency,
+                debitScaled: Value(saleTotalScaled),
+                baseDebitScaled: Value(baseSaleMoney.scaled),
+                occurredAt: command.saleAt.toUtc(),
+                operationId: command.operationId,
+              ),
+            );
+      }
 
       await db.into(db.operationLog).insert(
             OperationLogCompanion.insert(
@@ -328,6 +367,8 @@ class PostSaleService {
                 'total_scaled': saleTotalScaled,
                 'currency': currency,
                 'base_currency': baseCurrency,
+                'settlement_mode': command.settlementMode.name,
+                'customer_id': command.customerId,
               }),
             ),
           );
