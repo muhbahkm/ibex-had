@@ -13,25 +13,24 @@ void main() {
     expect(find.text('500 SAR'), findsOneWidget);
     expect(find.text('بانتظار الموافقة'), findsOneWidget);
 
-    final directionality = tester.widget<Directionality>(
-      find.descendant(
-        of: find.byType(IbexChatShell),
-        matching: find.byType(Directionality),
-      ).first,
-    );
-    expect(directionality.textDirection, TextDirection.rtl);
+    final context = tester.element(find.byType(IbexChatShell));
+    expect(Directionality.of(context), TextDirection.rtl);
   });
 
   testWidgets('approval and material edit visibly require a new review state', (tester) async {
     await tester.pumpWidget(const IbexVisualApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('اعتماد'));
+    final approve = find.text('اعتماد');
+    await tester.ensureVisible(approve);
+    await tester.tap(approve);
     await tester.pumpAndSettle();
     expect(find.text('تمت الموافقة'), findsOneWidget);
     expect(find.text('موافق عليها'), findsOneWidget);
 
-    await tester.tap(find.text('تعديل'));
+    final edit = find.text('تعديل');
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
     await tester.pumpAndSettle();
     expect(find.text('تحتاج مراجعة جديدة'), findsOneWidget);
     expect(find.text('اعتماد'), findsOneWidget);
@@ -42,14 +41,19 @@ void main() {
     await tester.pumpAndSettle();
 
     const message = 'اعرض مخزون السدر في المستودع الرئيسي';
-    await tester.enterText(find.byKey(const ValueKey('ibex-composer')), message);
+    final composer = find.byKey(const ValueKey('ibex-composer'));
+    await tester.ensureVisible(composer);
+    await tester.enterText(composer, message);
     await tester.tap(find.byKey(const ValueKey('ibex-send')));
     await tester.pumpAndSettle();
 
-    expect(find.text(message), findsOneWidget);
-    expect(
-      find.textContaining('هذه نسخة بصرية تجريبية'),
-      findsOneWidget,
+    final messageFinder = find.text(message);
+    await tester.scrollUntilVisible(
+      messageFinder,
+      250,
+      scrollable: find.byType(Scrollable).first,
     );
+    expect(messageFinder, findsOneWidget);
+    expect(find.textContaining('هذه نسخة بصرية تجريبية'), findsOneWidget);
   });
 }
