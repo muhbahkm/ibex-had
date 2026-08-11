@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../agent/approved_sale_draft_to_command.dart';
 import '../agent/command_registry.dart';
 import '../agent/create_sale_draft_service.dart';
 import '../agent/operational_draft.dart';
 import '../agent/revise_sale_draft_service.dart';
+import '../agent/sale_intent_interpreter.dart';
+import '../agent/sale_operational_workflow.dart';
 import '../core/errors/domain_error.dart';
 
 class SaleChatMessage {
@@ -64,12 +69,22 @@ class SaleDraftViewData {
   }
 }
 
+typedef SalePostingContextFactory = SalePostingContext Function(OperationalDraft draft);
+
 class SaleChatController extends ChangeNotifier {
   SaleChatController({
     required CreateSaleDraftService createSaleDraft,
     ReviseSaleDraftService reviseSaleDraft = const ReviseSaleDraftService(),
+    SaleOperationalWorkflow? workflow,
+    SalePostingContextFactory? postingContextFactory,
+    SaleIntentInterpreter interpreter = const SaleIntentInterpreter(),
+    String defaultWarehouseId = 'WH-1',
   })  : _createSaleDraft = createSaleDraft,
-        _reviseSaleDraft = reviseSaleDraft;
+        _reviseSaleDraft = reviseSaleDraft,
+        _workflow = workflow,
+        _postingContextFactory = postingContextFactory,
+        _interpreter = interpreter,
+        _defaultWarehouseId = defaultWarehouseId;
 
   factory SaleChatController.demo() {
     return SaleChatController(
@@ -80,8 +95,26 @@ class SaleChatController extends ChangeNotifier {
     );
   }
 
+  factory SaleChatController.persistent({
+    required SaleOperationalWorkflow workflow,
+    required SalePostingContextFactory postingContextFactory,
+    String defaultWarehouseId = 'WH-1',
+  }) {
+    return SaleChatController(
+      createSaleDraft: workflow.createSaleDraft,
+      workflow: workflow,
+      postingContextFactory: postingContextFactory,
+      defaultWarehouseId: defaultWarehouseId,
+    );
+  }
+
   final CreateSaleDraftService _createSaleDraft;
   final ReviseSaleDraftService _reviseSaleDraft;
+  final SaleOperationalWorkflow? _workflow;
+  final SalePostingContextFactory? _postingContextFactory;
+  final SaleIntentInterpreter _interpreter;
+  final String _defaultWarehouseId;
+
   OperationalDraft? _draft;
   bool _busy = false;
   String? _lastError;
@@ -90,7 +123,36 @@ class SaleChatController extends ChangeNotifier {
   bool get busy => _busy;
   String? get lastError => _lastError;
   OperationalDraft? get draft => _draft;
+  bool get persistent => _workflow != null;
   List<SaleChatMessage> get messages => List.unmodifiable(_messages);
+
+  Future<void> initialize() async {
+    final workflow = _workflow;
+    if (workflow == null) {
+      await initializeDemoDraft();
+      return;
+    }
+    if (_busy) return;
+    _busy = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      _draft = await workflow.loadLatestOpen();
+      if (_draft != null) {
+        _messages.add(
+          SaleChatMessage(
+            role: 'assistant',
+            text: 'استعدت مسودة البيع المفتوحة رقم الإصدار ${_draft!.version}. راجعها قبل المتابعة.',
+          ),
+        );
+      }
+    } on DomainError catch (error) {
+      _lastError = error.code;
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> initializeDemoDraft() async {
     if (_draft != null || _busy) return;
@@ -120,6 +182,11 @@ class SaleChatController extends ChangeNotifier {
   }
 
   void approve() {
+    final workflow = _workflow;
+    if (workflow != null) {
+      unawaited(_approvePersistent(workflow));
+      return;
+    }
     final current = _draft;
     if (current == null) return;
     try {
@@ -132,6 +199,11 @@ class SaleChatController extends ChangeNotifier {
   }
 
   void cancel() {
+    final workflow = _workflow;
+    if (workflow != null) {
+      unawaited(_cancelPersistent(workflow));
+      return;
+    }
     final current = _draft;
     if (current == null) return;
     try {
@@ -146,6 +218,11 @@ class SaleChatController extends ChangeNotifier {
   void requestEditTo400() => revisePrice('400');
 
   void revisePrice(String priceText) {
+    final workflow = _workflow;
+    if (workflow != null) {
+      unawaited(_revisePricePersistent(workflow, priceText));
+      return;
+    }
     final current = _draft;
     if (current == null) return;
     try {
@@ -163,6 +240,13 @@ class SaleChatController extends ChangeNotifier {
     final value = text.trim();
     if (value.isEmpty) return;
     _messages.add(SaleChatMessage(role: 'user', text: value));
+
+    final workflow = _workflow;
+    if (workflow != null) {
+      notifyListeners();
+      unawaited(_handlePersistentIntent(workflow, value));
+      return;
+    }
 
     final requestedPrice = _extractPriceRevision(value);
     if (requestedPrice != null && _draft != null) {
@@ -182,6 +266,174 @@ class SaleChatController extends ChangeNotifier {
       );
     }
     notifyListeners();
+  }
+
+  Future<void> _handlePersistentIntent(SaleOperationalWorkflow workflow, String value) async {
+    _busy = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final intent = _interpreter.interpret(value);
+      switch (intent) {
+        case CreateSaleConversationIntent():
+          final current = _draft;
+          if (current != null &&
+              current.state != OperationalDraftState.cancelled &&
+              current.state != OperationalDraftState.expired &&
+              current.state != OperationalDraftState.posted) {
+            throw const DomainError(
+              'OPEN_DRAFT_EXISTS',
+              'Finish or cancel the current draft before creating another sale draft.',
+            );
+          }
+          final sale = intent.sale;
+          final draftId = 'draft-sale-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+          _draft = await workflow.create(
+            CreateSaleDraftRequest(
+              draftId: draftId,
+              customerQuery: sale.customerQuery,
+              productQuery: sale.productQuery,
+              unitQuery: sale.unitQuery,
+              quantityText: sale.quantityText,
+              unitPriceText: sale.unitPriceText,
+              currencyCode: sale.currencyCode,
+              warehouseId: _defaultWarehouseId,
+              createdAtUtc: DateTime.now().toUtc(),
+            ),
+          );
+          _messages.add(
+            const SaleChatMessage(
+              role: 'assistant',
+              text: 'جهزت مسودة البيع من البيانات المحلية. لم أرحّل أي قيد أو حركة مخزون؛ راجع البطاقة ثم وافق عليها.',
+            ),
+          );
+        case ReviseSalePriceIntent():
+          final current = _requireDraft();
+          _draft = await workflow.revisePrice(current.draftId, intent.priceText);
+          _messages.add(
+            SaleChatMessage(
+              role: 'assistant',
+              text: 'تم تعديل السعر إلى ${intent.priceText} ${viewData?.currencyCode ?? ''}. أصبحت المسودة إصدار ${_draft!.version} وتحتاج موافقة جديدة.',
+            ),
+          );
+        case ReviseSaleQuantityIntent():
+          final current = _requireDraft();
+          _draft = await workflow.reviseQuantity(current.draftId, intent.quantityText);
+          _messages.add(
+            SaleChatMessage(
+              role: 'assistant',
+              text: 'تم تعديل الكمية إلى ${intent.quantityText}. أصبحت المسودة إصدار ${_draft!.version} وتحتاج موافقة جديدة.',
+            ),
+          );
+        case ApproveSaleDraftIntent():
+          final current = _requireDraft();
+          _draft = await workflow.approve(current.draftId);
+          _messages.add(
+            const SaleChatMessage(
+              role: 'assistant',
+              text: 'تم تثبيت الموافقة على هذه النسخة من المسودة. لم يتم الترحيل بعد؛ اكتب «رحّل الفاتورة» للتنفيذ النهائي.',
+            ),
+          );
+        case CancelSaleDraftIntent():
+          final current = _requireDraft();
+          _draft = await workflow.cancel(current.draftId);
+          _messages.add(const SaleChatMessage(role: 'assistant', text: 'ألغيت المسودة دون إنشاء أي حقيقة محاسبية أو مخزنية.'));
+        case PostSaleDraftIntent():
+          final current = _requireDraft();
+          final factory = _postingContextFactory;
+          if (factory == null) {
+            throw const DomainError('POSTING_CONTEXT_REQUIRED', 'Posting context is not configured.');
+          }
+          final result = await workflow.postApproved(
+            draftId: current.draftId,
+            context: factory(current),
+          );
+          _draft = await workflow.loadRequired(current.draftId);
+          _messages.add(
+            SaleChatMessage(
+              role: 'assistant',
+              text: 'تم ترحيل فاتورة البيع بنجاح برقم ${result.documentNo}. أنشأ محرك IBEX القيد وحركة المخزون والدفع والتدقيق في معاملة واحدة.',
+            ),
+          );
+        case UnsupportedSaleIntent():
+          _messages.add(
+            const SaleChatMessage(
+              role: 'assistant',
+              text: 'لم أتعرف على إجراء تشغيلي مسجل يمكن تنفيذه بأمان. أعد صياغة الطلب وحدد الصنف والكمية والوحدة والسعر والعملة والعميل.',
+            ),
+          );
+      }
+    } on DomainError catch (error) {
+      _lastError = error.code;
+      _messages.add(SaleChatMessage(role: 'assistant', text: 'لم أنفذ الطلب: ${error.code}. لم يتم تغيير الحقيقة التشغيلية.'));
+    } catch (_) {
+      _lastError = 'UNEXPECTED_OPERATION_FAILURE';
+      _messages.add(
+        const SaleChatMessage(
+          role: 'assistant',
+          text: 'حدث خطأ غير متوقع أثناء الإجراء. أوقفت التنفيذ ولم أعتبر العملية ناجحة.',
+        ),
+      );
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _approvePersistent(SaleOperationalWorkflow workflow) async {
+    final current = _draft;
+    if (current == null || _busy) return;
+    _busy = true;
+    notifyListeners();
+    try {
+      _draft = await workflow.approve(current.draftId);
+      _lastError = null;
+    } on DomainError catch (error) {
+      _lastError = error.code;
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _cancelPersistent(SaleOperationalWorkflow workflow) async {
+    final current = _draft;
+    if (current == null || _busy) return;
+    _busy = true;
+    notifyListeners();
+    try {
+      _draft = await workflow.cancel(current.draftId);
+      _lastError = null;
+    } on DomainError catch (error) {
+      _lastError = error.code;
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _revisePricePersistent(SaleOperationalWorkflow workflow, String priceText) async {
+    final current = _draft;
+    if (current == null || _busy) return;
+    _busy = true;
+    notifyListeners();
+    try {
+      _draft = await workflow.revisePrice(current.draftId, priceText);
+      _lastError = null;
+    } on DomainError catch (error) {
+      _lastError = error.code;
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
+  }
+
+  OperationalDraft _requireDraft() {
+    final current = _draft;
+    if (current == null) {
+      throw const DomainError('DRAFT_NOT_FOUND', 'No active sale draft exists.');
+    }
+    return current;
   }
 
   SaleDraftViewData? get viewData {
@@ -208,7 +460,9 @@ class SaleChatController extends ChangeNotifier {
     }
     return SaleDraftViewData(
       customerName: customerName,
-      warehouseName: 'المستودع الرئيسي',
+      warehouseName: _defaultWarehouseId == 'WH-1' || _defaultWarehouseId == 'warehouse-main'
+          ? 'المستودع الرئيسي'
+          : _defaultWarehouseId,
       productName: productName,
       unitName: unitName,
       quantityScaled: quantityScaled,
