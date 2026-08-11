@@ -65,6 +65,8 @@ class SpikeSeedData {
         OperationalPermissions.transferStock,
         OperationalPermissions.postSaleReturn,
         OperationalPermissions.postPurchaseReturn,
+        OperationalPermissions.postExpense,
+        OperationalPermissions.reverseExpense,
       ]) {
         await db.into(db.rolePermissions).insertOnConflictUpdate(
               RolePermissionsCompanion.insert(
