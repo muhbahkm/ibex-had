@@ -2,6 +2,31 @@
 
 Status: **Active validation — not production-approved**
 
+## 2026-08-11 — Same-head Foundation + Android runtime gates passed
+
+### Accepted head
+- Commit: `31e3d8ab44986b6f62ac0f33cae8166afad33191`.
+- Foundation run: `31514943699` — **success**.
+- Android Runtime run: `31514943707` — **success**.
+
+### Foundation evidence
+- Dependency resolution completed.
+- Drift generation completed.
+- `flutter analyze` completed with no issues.
+- Full Flutter test suite completed successfully.
+- Encrypted v1 migration gate now validates schema v13 and requires the persisted `fx_rates` table while preserving historical sale truth without inventing missing historical base-currency/customer values.
+
+### Android evidence
+- Dependency resolution + Drift generation completed.
+- Disposable Android host generated.
+- Android debug APK built successfully.
+- `ibex-visual-prototype-debug-apk` artifact published.
+- KVM-enabled Android emulator started.
+- Encrypted persistence integration test completed successfully on Android, covering sqlite3mc persistence and the tested backup/restore/key lifecycle.
+
+### Gate interpretation
+This closes the continuation gate documented in `CURRENT_HANDOFF.md`: Foundation and Android Runtime are green on the exact same executable head. This does **not** make the application production-ready. Production hardening continues in the documented priority order, starting with complete authorization enforcement on every state-changing Operating Engine command.
+
 ## 2026-08-11 — PostSale hardening slice
 
 ### Implemented
