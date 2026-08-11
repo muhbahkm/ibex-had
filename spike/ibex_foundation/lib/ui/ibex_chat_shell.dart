@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../agent/operational_draft.dart';
+import '../presentation/sale_chat_controller.dart';
+
 class IbexVisualApp extends StatelessWidget {
   const IbexVisualApp({super.key});
 
@@ -27,10 +30,10 @@ class IbexVisualApp extends StatelessWidget {
   }
 }
 
-enum DraftVisualStatus { awaitingApproval, approved, changed, cancelled }
-
 class IbexChatShell extends StatefulWidget {
-  const IbexChatShell({super.key});
+  const IbexChatShell({super.key, this.controller});
+
+  final SaleChatController? controller;
 
   @override
   State<IbexChatShell> createState() => _IbexChatShellState();
@@ -38,11 +41,26 @@ class IbexChatShell extends StatefulWidget {
 
 class _IbexChatShellState extends State<IbexChatShell> {
   final composer = TextEditingController();
-  DraftVisualStatus status = DraftVisualStatus.awaitingApproval;
-  String? lastMessage;
+  late final SaleChatController controller;
+  late final bool ownsController;
+
+  @override
+  void initState() {
+    super.initState();
+    ownsController = widget.controller == null;
+    controller = widget.controller ?? SaleChatController.demo();
+    controller.addListener(_refresh);
+    controller.initializeDemoDraft();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    controller.removeListener(_refresh);
+    if (ownsController) controller.dispose();
     composer.dispose();
     super.dispose();
   }
@@ -50,10 +68,8 @@ class _IbexChatShellState extends State<IbexChatShell> {
   void submit() {
     final value = composer.text.trim();
     if (value.isEmpty) return;
-    setState(() {
-      lastMessage = value;
-      composer.clear();
-    });
+    controller.submitNaturalLanguage(value);
+    composer.clear();
   }
 
   @override
@@ -78,35 +94,33 @@ class _IbexChatShellState extends State<IbexChatShell> {
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 820),
                             child: ListView(
-                              padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+                              key: const ValueKey('ibex-conversation-scroll'),
+                              padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
                               children: [
                                 const _Welcome(),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 22),
                                 const _UserBubble(
                                   text:
                                       'أنشئ فاتورة مبيعات لصنف السدر عبوة كيلو، الكمية 1، السعر 500 ريال سعودي، على حساب محمد عبدالله باحكم.',
                                 ),
                                 const SizedBox(height: 14),
-                                _AgentDraft(
-                                  status: status,
-                                  onApprove: () => setState(
-                                    () => status = DraftVisualStatus.approved,
+                                if (controller.busy)
+                                  const _AgentLine(text: 'أجهز المسودة وأتحقق من البيانات…')
+                                else if (controller.lastError != null)
+                                  _AgentLine(text: 'تعذر تجهيز المسودة: ${controller.lastError}')
+                                else if (controller.viewData != null)
+                                  _AgentDraft(
+                                    data: controller.viewData!,
+                                    onApprove: controller.approve,
+                                    onEdit: controller.requestEditTo400,
+                                    onCancel: controller.cancel,
                                   ),
-                                  onEdit: () => setState(
-                                    () => status = DraftVisualStatus.changed,
-                                  ),
-                                  onCancel: () => setState(
-                                    () => status = DraftVisualStatus.cancelled,
-                                  ),
-                                ),
-                                if (lastMessage != null) ...[
-                                  const SizedBox(height: 18),
-                                  _UserBubble(text: lastMessage!),
-                                  const SizedBox(height: 14),
-                                  const _AgentLine(
-                                    text:
-                                        'وصل الطلب. هذه نسخة بصرية تجريبية؛ التنفيذ الفعلي سيمر عبر Draft ثم Preview ثم موافقة ثم IBEX Operating Engine.',
-                                  ),
+                                for (final message in controller.messages) ...[
+                                  const SizedBox(height: 16),
+                                  if (message.role == 'user')
+                                    _UserBubble(text: message.text)
+                                  else
+                                    _AgentLine(text: message.text),
                                 ],
                               ],
                             ),
@@ -154,10 +168,7 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('IBEX', style: TextStyle(fontWeight: FontWeight.w800)),
-                Text(
-                  'المساعد التشغيلي',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF68736D)),
-                ),
+                Text('المساعد التشغيلي', style: TextStyle(fontSize: 12, color: Color(0xFF68736D))),
               ],
             ),
           ),
@@ -185,14 +196,7 @@ class _SafePill extends StatelessWidget {
         children: [
           Icon(Icons.shield_outlined, size: 15, color: Color(0xFF0D6B57)),
           SizedBox(width: 5),
-          Text(
-            'محلي وآمن',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF0D6B57),
-            ),
-          ),
+          Text('محلي وآمن', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0D6B57))),
         ],
       ),
     );
@@ -262,34 +266,7 @@ class _Sidebar extends StatelessWidget {
             onPressed: () {},
             icon: const Icon(Icons.settings_outlined),
             label: const Text('الإعدادات'),
-            style: TextButton.styleFrom(
-              alignment: Alignment.centerRight,
-              foregroundColor: const Color(0xFF26322C),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.68),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Row(
-              children: [
-                CircleAvatar(
-                  radius: 17,
-                  backgroundColor: Color(0xFFE1E9E5),
-                  child: Icon(Icons.person_outline_rounded, size: 19),
-                ),
-                SizedBox(width: 9),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('المستخدم', style: TextStyle(fontWeight: FontWeight.w700)),
-                    Text('وضع تجريبي محلي', style: TextStyle(fontSize: 11, color: Color(0xFF68736D))),
-                  ],
-                ),
-              ],
-            ),
+            style: TextButton.styleFrom(alignment: Alignment.centerRight, foregroundColor: const Color(0xFF26322C)),
           ),
         ],
       ),
@@ -306,10 +283,7 @@ class _BrandMark extends StatelessWidget {
       width: 38,
       height: 38,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D6B57),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF0D6B57), borderRadius: BorderRadius.circular(12)),
       child: const Text('I', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20)),
     );
   }
@@ -325,10 +299,7 @@ class _Welcome extends StatelessWidget {
       children: [
         const _BrandMark(),
         const SizedBox(height: 14),
-        const Text(
-          'ماذا تريد أن تنجز اليوم؟',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 23),
-        ),
+        const Text('ماذا تريد أن تنجز اليوم؟', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 23)),
         const SizedBox(height: 6),
         const Text(
           'اطلب إجراءً تشغيليًا بلغة طبيعية. سأجهز المسودة وأعرضها عليك قبل أي اعتماد.',
@@ -378,10 +349,7 @@ class _UserBubble extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 620),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE9EEEB),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: BoxDecoration(color: const Color(0xFFE9EEEB), borderRadius: BorderRadius.circular(20)),
         child: Text(text, style: const TextStyle(fontSize: 15, height: 1.5)),
       ),
     );
@@ -399,7 +367,7 @@ class _AgentLine extends StatelessWidget {
       children: [
         const _AgentMark(),
         const SizedBox(width: 10),
-        Expanded(child: Padding(padding: const EdgeInsets.only(top: 4), child: Text(text))),
+        Expanded(child: Padding(padding: const EdgeInsets.only(top: 4), child: Text(text, style: const TextStyle(height: 1.5)))),
       ],
     );
   }
@@ -414,10 +382,7 @@ class _AgentMark extends StatelessWidget {
       width: 32,
       height: 32,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D6B57),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF0D6B57), borderRadius: BorderRadius.circular(10)),
       child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 17),
     );
   }
@@ -425,12 +390,13 @@ class _AgentMark extends StatelessWidget {
 
 class _AgentDraft extends StatelessWidget {
   const _AgentDraft({
-    required this.status,
+    required this.data,
     required this.onApprove,
     required this.onEdit,
     required this.onCancel,
   });
-  final DraftVisualStatus status;
+
+  final SaleDraftViewData data;
   final VoidCallback onApprove;
   final VoidCallback onEdit;
   final VoidCallback onCancel;
@@ -446,16 +412,13 @@ class _AgentDraft extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 2, bottom: 10),
-                child: Text('جهزت مسودة الفاتورة. راجعها قبل الاعتماد.'),
+              Text(
+                data.version == 1
+                    ? 'جهزت مسودة الفاتورة من عقد CreateSaleDraft. راجعها قبل الاعتماد.'
+                    : 'تم تحديث المسودة إلى الإصدار ${data.version}. تحتاج مراجعة وموافقة جديدة.',
               ),
-              _SaleDraftCard(
-                status: status,
-                onApprove: onApprove,
-                onEdit: onEdit,
-                onCancel: onCancel,
-              ),
+              const SizedBox(height: 10),
+              _SaleDraftCard(data: data, onApprove: onApprove, onEdit: onEdit, onCancel: onCancel),
             ],
           ),
         ),
@@ -465,28 +428,29 @@ class _AgentDraft extends StatelessWidget {
 }
 
 class _SaleDraftCard extends StatelessWidget {
-  const _SaleDraftCard({
-    required this.status,
-    required this.onApprove,
-    required this.onEdit,
-    required this.onCancel,
-  });
-  final DraftVisualStatus status;
+  const _SaleDraftCard({required this.data, required this.onApprove, required this.onEdit, required this.onCancel});
+
+  final SaleDraftViewData data;
   final VoidCallback onApprove;
   final VoidCallback onEdit;
   final VoidCallback onCancel;
 
-  String get statusText => switch (status) {
-        DraftVisualStatus.awaitingApproval => 'بانتظار الموافقة',
-        DraftVisualStatus.approved => 'تمت الموافقة',
-        DraftVisualStatus.changed => 'تحتاج مراجعة جديدة',
-        DraftVisualStatus.cancelled => 'ملغاة',
+  String get statusText => switch (data.state) {
+        OperationalDraftState.awaitingApproval => 'بانتظار الموافقة',
+        OperationalDraftState.approved => 'تمت الموافقة',
+        OperationalDraftState.cancelled => 'ملغاة',
+        OperationalDraftState.expired => 'منتهية',
+        OperationalDraftState.posted => 'تم الترحيل',
+        OperationalDraftState.draftReady => 'مسودة',
       };
 
   @override
   Widget build(BuildContext context) {
-    final cancelled = status == DraftVisualStatus.cancelled;
+    final terminal = data.state == OperationalDraftState.cancelled ||
+        data.state == OperationalDraftState.expired ||
+        data.state == OperationalDraftState.posted;
     return Container(
+      key: const ValueKey('sale-draft-card'),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -505,70 +469,59 @@ class _SaleDraftCard extends StatelessWidget {
                     Container(
                       width: 40,
                       height: 40,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEAF4F0),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFFEAF4F0), borderRadius: BorderRadius.circular(12)),
                       child: const Icon(Icons.receipt_long_outlined, color: Color(0xFF0D6B57)),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('مسودة فاتورة بيع', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                          Text('لم تُرحّل محاسبيًا أو مخزنيًا', style: TextStyle(fontSize: 11.5, color: Color(0xFF6A756F))),
+                          const Text('مسودة فاتورة بيع', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                          Text('الإصدار ${data.version} • لم تُرحّل محاسبيًا أو مخزنيًا', style: const TextStyle(fontSize: 11.5, color: Color(0xFF6A756F))),
                         ],
                       ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: status == DraftVisualStatus.approved
-                            ? const Color(0xFFEAF4F0)
-                            : const Color(0xFFF4F1E8),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFFEAF4F0), borderRadius: BorderRadius.circular(999)),
                       child: Text(statusText, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 18),
-                const _Info(label: 'العميل', value: 'محمد عبدالله باحكم'),
-                const _Info(label: 'المستودع', value: 'المستودع الرئيسي'),
+                _Info(label: 'العميل', value: data.customerName),
+                _Info(label: 'المستودع', value: data.warehouseName),
                 const SizedBox(height: 9),
                 Container(
                   padding: const EdgeInsets.all(13),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7F8F6),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Row(
+                  decoration: BoxDecoration(color: const Color(0xFFF7F8F6), borderRadius: BorderRadius.circular(14)),
+                  child: Row(
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('سدر — عبوة كيلو', style: TextStyle(fontWeight: FontWeight.w700)),
-                            SizedBox(height: 2),
-                            Text('الوحدة: جالون', style: TextStyle(fontSize: 11.5, color: Color(0xFF6A756F))),
+                            Text(data.productName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 2),
+                            Text('الوحدة: ${data.unitName}', style: const TextStyle(fontSize: 11.5, color: Color(0xFF6A756F))),
                           ],
                         ),
                       ),
-                      Text('1 × 500 SAR', textDirection: TextDirection.ltr),
+                      Text('${data.quantityText} × ${data.unitPriceText} ${data.currencyCode}', textDirection: TextDirection.ltr),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
                 const Divider(height: 1),
                 const SizedBox(height: 12),
-                const Row(
+                Row(
                   children: [
-                    Expanded(child: Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.w700))),
+                    const Expanded(child: Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.w700))),
                     Text(
-                      '500 SAR',
+                      '${data.totalText} ${data.currencyCode}',
                       textDirection: TextDirection.ltr,
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                     ),
                   ],
                 ),
@@ -585,9 +538,10 @@ class _SaleDraftCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: cancelled ? null : onApprove,
+                    key: const ValueKey('approve-draft'),
+                    onPressed: terminal || data.state == OperationalDraftState.approved ? null : onApprove,
                     icon: const Icon(Icons.check_rounded, size: 18),
-                    label: Text(status == DraftVisualStatus.approved ? 'موافق عليها' : 'اعتماد'),
+                    label: Text(data.state == OperationalDraftState.approved ? 'موافق عليها' : 'اعتماد'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(44),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -596,7 +550,8 @@ class _SaleDraftCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
-                  onPressed: cancelled ? null : onEdit,
+                  key: const ValueKey('edit-draft'),
+                  onPressed: terminal ? null : onEdit,
                   icon: const Icon(Icons.edit_outlined, size: 17),
                   label: const Text('تعديل'),
                   style: OutlinedButton.styleFrom(
@@ -606,8 +561,9 @@ class _SaleDraftCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 IconButton.outlined(
+                  key: const ValueKey('cancel-draft'),
                   tooltip: 'إلغاء المسودة',
-                  onPressed: cancelled ? null : onCancel,
+                  onPressed: terminal ? null : onCancel,
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
@@ -647,9 +603,7 @@ class _Composer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 13),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFFE5E9E6))),
-      ),
+      decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFFE5E9E6)))),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 820),
@@ -661,6 +615,7 @@ class _Composer extends StatelessWidget {
                 controller: controller,
                 minLines: 1,
                 maxLines: 5,
+                onSubmitted: (_) => onSubmit(),
                 decoration: InputDecoration(
                   hintText: 'اطلب من IBEX تنفيذ إجراء…',
                   filled: true,
@@ -682,7 +637,7 @@ class _Composer extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'المعاينة لا تُنشئ قيودًا أو حركات مخزون حتى يتم الاعتماد.',
+                'المعاينة لا تُنشئ قيودًا أو حركات مخزون حتى يتم الاعتماد والترحيل عبر المحرك التشغيلي.',
                 style: TextStyle(fontSize: 10.5, color: Color(0xFF7A847F)),
                 textAlign: TextAlign.center,
               ),
