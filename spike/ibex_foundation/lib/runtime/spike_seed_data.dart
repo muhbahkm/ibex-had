@@ -34,11 +34,14 @@ class SpikeSeedData {
             ),
           );
 
+      // IBEX is local-first: the installation is immediately usable without
+      // cloud authentication. This record is an internal audit/authorization
+      // identity for the device owner, not a login account.
       await db.into(db.appUsers).insertOnConflictUpdate(
             AppUsersCompanion.insert(
               id: config.userId,
               businessId: config.businessId,
-              displayName: 'مدير IBEX التجريبي',
+              displayName: 'المالك المحلي',
               updatedAt: now,
             ),
           );
@@ -46,7 +49,7 @@ class SpikeSeedData {
             RolesCompanion.insert(
               id: 'ROLE-LOCAL-ADMIN',
               businessId: config.businessId,
-              name: 'مدير التشغيل',
+              name: 'مالك الجهاز',
               updatedAt: now,
             ),
           );
