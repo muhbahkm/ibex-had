@@ -36,6 +36,9 @@ class SaleOperationalWorkflow {
     return draft;
   }
 
+  Future<OperationalDraft?> loadLatestOpen() =>
+      draftRepository.loadLatestOpen(commandName: CreateSaleDraftService.commandName);
+
   Future<OperationalDraft> loadRequired(String draftId) async {
     final draft = await draftRepository.load(draftId.trim());
     if (draft == null) {
