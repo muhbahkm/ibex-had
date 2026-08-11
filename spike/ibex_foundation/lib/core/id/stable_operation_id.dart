@@ -31,17 +31,39 @@ class StableOperationId {
         '${hex.substring(20, 32)}';
   }
 
-  static String forApprovedSaleDraft({
+  static String forApprovedDraft({
+    required String commandName,
     required String businessId,
     required String draftId,
     required int version,
     required String fingerprint,
   }) {
+    final command = commandName.trim();
+    final business = businessId.trim();
+    final draft = draftId.trim();
+    final approvedFingerprint = fingerprint.trim();
+    if (command.isEmpty || business.isEmpty || draft.isEmpty || approvedFingerprint.isEmpty) {
+      throw ArgumentError('Approved draft operation material cannot contain blank identity fields.');
+    }
     if (version <= 0) {
       throw ArgumentError.value(version, 'version', 'Draft version must be positive.');
     }
     return fromCanonicalMaterial(
-      'IBEX2|PostSale|business=${businessId.trim()}|draft=${draftId.trim()}|version=$version|fingerprint=$fingerprint',
+      'IBEX2|$command|business=$business|draft=$draft|version=$version|fingerprint=$approvedFingerprint',
     );
   }
+
+  static String forApprovedSaleDraft({
+    required String businessId,
+    required String draftId,
+    required int version,
+    required String fingerprint,
+  }) =>
+      forApprovedDraft(
+        commandName: 'PostSale',
+        businessId: businessId,
+        draftId: draftId,
+        version: version,
+        fingerprint: fingerprint,
+      );
 }
