@@ -79,6 +79,25 @@ void main() {
     );
   });
 
+  test('CreateSaleDraft refuses ambiguous product instead of guessing', () async {
+    final service = CreateSaleDraftService(
+      catalog: _Catalog(
+        products: const [
+          SaleDraftProduct(id: 'product-1', name: 'سدر — عبوة كيلو'),
+          SaleDraftProduct(id: 'product-2', name: 'سدر فاخر — عبوة كيلو'),
+        ],
+      ),
+      registry: registry,
+    );
+
+    await expectLater(
+      service.execute(_request()),
+      throwsA(
+        isA<DomainError>().having((error) => error.code, 'code', 'PRODUCT_AMBIGUOUS'),
+      ),
+    );
+  });
+
   test('CreateSaleDraft refuses a unit that is not resolved for the selected product', () async {
     final service = CreateSaleDraftService(
       catalog: _Catalog(units: const []),
