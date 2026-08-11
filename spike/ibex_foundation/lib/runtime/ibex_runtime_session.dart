@@ -13,7 +13,9 @@ import '../agent/operational_draft_repository.dart';
 import '../agent/sale_operational_workflow.dart';
 import '../ai/gemini_api_key_store.dart';
 import '../ai/gemini_operational_intent_resolver.dart';
+import '../core/errors/domain_error.dart';
 import '../core/id/stable_operation_id.dart';
+import '../core/time/business_document_calendar.dart';
 import '../database/encrypted_database_opener.dart';
 import '../database/spike_database.dart';
 import '../finance/local_fx_rate_provider.dart';
@@ -64,6 +66,25 @@ class IbexRuntimeSession {
         await SpikeSeedData.ensureSeeded(db, config: config);
       }
 
+      final settings = await (db.select(db.businessSettings)
+            ..where((row) => row.businessId.equals(config.businessId)))
+          .getSingleOrNull();
+      if (settings == null || !settings.onboardingComplete) {
+        throw const DomainError(
+          'BUSINESS_ONBOARDING_REQUIRED',
+          'Local business settings must be completed before operational runtime starts.',
+        );
+      }
+      if (settings.baseCurrencyCode != config.baseCurrencyCode) {
+        throw const DomainError(
+          'BUSINESS_CONFIG_CURRENCY_MISMATCH',
+          'Runtime base currency must match persisted business settings.',
+        );
+      }
+      final calendar = FixedOffsetBusinessDocumentCalendar.validated(
+        settings.utcOffsetMinutes,
+      );
+
       final catalog = LocalSaleDraftCatalog(
         db: db,
         businessId: config.businessId,
@@ -73,7 +94,7 @@ class IbexRuntimeSession {
         registry: const AgentCommandRegistry({CreateSaleDraftService.commandName}),
       );
 
-      final postSale = PostSaleService(db);
+      final postSale = PostSaleService(db, calendar: calendar);
       final operationalActions = OperationalActionFacade(
         registry: const AgentCommandRegistry(
           OperationalActionFacade.registeredMutationCommands,
