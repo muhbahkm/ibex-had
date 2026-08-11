@@ -33,6 +33,9 @@ This file is the repository-side index of architectural and product decisions. D
 - ADR-014 — **Tax-ready but tax-disabled V1:** store only future-safe tax registration and posted snapshot metadata; while tax is disabled all tax amounts remain zero and no jurisdiction-specific tax engine runs.
 - ADR-015 — **Fixed quantity scale:** canonical quantities and conversion factors use signed 64-bit scaled integers at scale 1e6; unit metadata controls allowed/display precision from 0 to 6 decimals.
 - ADR-016 — **Application-owned document numbering:** visible document numbers come from transactional `document_sequences` scoped by business/document type/year, while UUID remains canonical identity. SQLite row IDs/AUTOINCREMENT are not business document numbers.
+- ADR-017 — **Conversational Operating Agent / Chat-first UI:** the primary IBEX interaction surface is conversational, with typed operational cards and natural-language commands. The agent may interpret, resolve, plan, draft, and explain, but it may never bypass the Command Catalog or IBEX Operating Engine and may never write accounting, inventory, settlement, numbering, audit, or posted-document truth directly.
+- ADR-017 requires **draft → preview → explicit approval → typed post command** for material state changes by default. Any material change invalidates prior approval.
+- IBEX is Chat-first, not Chat-only: deterministic/manual views remain available for browsing and fallback, and core operation must remain possible when an AI provider is unavailable.
 
 ## Proposed / Pending Implementation Validation
 - ADR-002 — Flutter as primary client platform.
@@ -40,6 +43,7 @@ This file is the repository-side index of architectural and product decisions. D
 - Typography — Noto Sans Arabic + Noto Sans.
 - Encrypted SQLite implementation details and exact package configuration.
 - Thermal printer and barcode hardware compatibility baseline.
+- Exact AI model/provider strategy, local-vs-cloud routing, conversation retention, and privacy policy.
 
 ## V1 Architecture / Schema Design References
 - `docs/SCHEMA_DECISIONS_V1.md`
@@ -56,6 +60,7 @@ This file is the repository-side index of architectural and product decisions. D
 - `docs/POSTING_MATRIX_V1.md`
 - `docs/INVENTORY_MOVEMENT_MATRIX_V1.md`
 - `docs/ACCEPTANCE_TEST_MATRIX_V1.md`
+- `docs/CONVERSATIONAL_OPERATING_AGENT_V1.md`
 
 ## Remaining Gates Before Schema / Domain Freeze
 - Validate encrypted SQLite spike on representative Android devices.
@@ -64,5 +69,6 @@ This file is the repository-side index of architectural and product decisions. D
 - Validate thermal printer and barcode hardware strategy.
 - Complete legacy migration mapping and reconciliation validation.
 - Validate the accepted schema/domain contracts with executable critical-path tests.
+- Define and test the first bounded conversational draft flow without granting the AI any direct mutation authority.
 
 The five former physical-schema clarifications (returns, transfers, tax-ready metadata, quantity precision, document numbering) are closed for V1 by ADR-012 through ADR-016.
