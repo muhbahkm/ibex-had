@@ -18,25 +18,26 @@ class LocalSupplierLookup {
   Future<List<SupplierLookupResult>> find(String query) async {
     final normalized = ArabicSearchNormalizer.normalize(query);
     if (normalized.isEmpty) return const [];
-    final alternatives = ArabicSearchNormalizer.searchAlternatives(query);
-    final clauses = <String>[];
-    final variables = <Variable<Object>>[Variable.withString(businessId)];
-    for (final alternative in alternatives) {
-      clauses.add('normalized_name LIKE ?');
-      variables.add(Variable.withString('%$alternative%'));
-    }
+    final relaxed = _relaxArabicDefiniteArticles(normalized);
     final rows = await db.customSelect(
       '''
       SELECT id, name
       FROM suppliers
       WHERE business_id = ? AND active = 1
-        AND (${clauses.join(' OR ')})
-      ORDER BY CASE WHEN normalized_name = ? THEN 0 ELSE 1 END, name
+        AND (normalized_name LIKE ? OR normalized_name LIKE ?)
+      ORDER BY CASE
+        WHEN normalized_name = ? THEN 0
+        WHEN normalized_name = ? THEN 1
+        ELSE 2
+      END, name
       LIMIT 8
       ''',
       variables: [
-        ...variables,
+        Variable.withString(businessId),
+        Variable.withString('%$normalized%'),
+        Variable.withString('%$relaxed%'),
         Variable.withString(normalized),
+        Variable.withString(relaxed),
       ],
       readsFrom: {db.suppliers},
     ).get();
@@ -46,5 +47,14 @@ class LocalSupplierLookup {
               name: row.read<String>('name'),
             ))
         .toList(growable: false);
+  }
+
+  String _relaxArabicDefiniteArticles(String normalized) {
+    return normalized
+        .split(' ')
+        .map((token) => token.startsWith('ال') && token.length > 3
+            ? token.substring(2)
+            : token)
+        .join(' ');
   }
 }
