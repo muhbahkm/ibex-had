@@ -5,6 +5,7 @@ import 'package:ibex_foundation_spike/agent/operational_action_facade.dart';
 import 'package:ibex_foundation_spike/database/spike_database.dart';
 import 'package:ibex_foundation_spike/operating_engine/pay_supplier_command.dart';
 import 'package:ibex_foundation_spike/operating_engine/pay_supplier_service.dart';
+import 'package:ibex_foundation_spike/operating_engine/post_expense_service.dart';
 import 'package:ibex_foundation_spike/operating_engine/post_purchase_return_service.dart';
 import 'package:ibex_foundation_spike/operating_engine/post_purchase_service.dart';
 import 'package:ibex_foundation_spike/operating_engine/post_sale_command.dart';
@@ -56,8 +57,6 @@ void main() {
       registry: const AgentCommandRegistry({OperationalActionFacade.paySupplierCommand}),
     );
 
-    // Authorization passes, then the engine rejects because no supplier master data exists.
-    // This proves the request crossed the authorization gate but still produced no partial truth.
     await expectLater(
       facade.executePaySupplier(_payCommand(operationId: 'OP-AUTHORIZED')),
       throwsA(isA<Exception>()),
@@ -166,6 +165,7 @@ OperationalActionFacade _facade(
       transferStock: TransferStockService(db),
       postSaleReturn: PostSaleReturnService(db),
       postPurchaseReturn: PostPurchaseReturnService(db),
+      postExpense: PostExpenseService(db),
     );
 
 PaySupplierCommand _payCommand({required String operationId}) => PaySupplierCommand(
