@@ -156,9 +156,22 @@ void main() {
       postExpenseExecutor: (_) async => throw UnimplementedError(),
     );
 
-    await workflow.create(request());
+    final original = await workflow.create(request());
     await expectLater(workflow.create(request()), throwsA(isA<Exception>()));
-    final rows = await db.select(db.operationalDraftRecords).get();
-    expect(rows, hasLength(1));
+
+    final stored = await repository.load(original.draftId);
+    expect(stored, isNotNull);
+    expect(stored!.draftId, original.draftId);
+    expect(stored.version, original.version);
+    expect(stored.fingerprint, original.fingerprint);
+    expect(stored.state, OperationalDraftState.awaitingApproval);
+
+    final count = await db.customSelect(
+      'SELECT COUNT(*) AS draft_count FROM operational_draft_records WHERE draft_id = ?',
+      variables: [
+        const Variable<String>('D-EXP-1'),
+      ],
+    ).getSingle();
+    expect(count.read<int>('draft_count'), 1);
   });
 }
