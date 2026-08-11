@@ -5,6 +5,7 @@ import 'customer_receipts_table.dart';
 import 'master_data_tables.dart';
 import 'operational_drafts_table.dart';
 import 'spike_tables.dart';
+import 'stock_transfer_tables.dart';
 import 'supplier_payments_table.dart';
 
 part 'spike_database.g.dart';
@@ -20,6 +21,8 @@ part 'spike_database.g.dart';
     PurchaseItems,
     StockMovements,
     StockMovementItems,
+    StockTransfers,
+    StockTransferItems,
     JournalEntries,
     JournalLines,
     Payments,
@@ -44,7 +47,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -83,6 +86,10 @@ class SpikeDatabase extends _$SpikeDatabase {
           }
           if (from < 8) {
             await m.createTable(supplierPayments);
+          }
+          if (from < 9) {
+            await m.createTable(stockTransfers);
+            await m.createTable(stockTransferItems);
           }
         },
         beforeOpen: (_) async {
