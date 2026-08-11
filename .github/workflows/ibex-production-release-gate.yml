@@ -64,13 +64,24 @@ jobs:
       - name: Generate temporary Android host until committed host milestone
         working-directory: spike/ibex_foundation
         run: |
+          set -euo pipefail
           rm -rf /tmp/ibex_android_host android
           flutter create --platforms=android --org com.ibex.had --project-name ibex_foundation_spike /tmp/ibex_android_host
           cp -R /tmp/ibex_android_host/android ./android
 
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+          fi
+          grep -q 'android.permission.INTERNET' "$MANIFEST"
+
       - name: Build ARM64 production entrypoint candidate
         working-directory: spike/ibex_foundation
         run: flutter build apk --release --target lib/main_production.dart --target-platform android-arm64 --split-per-abi
+
+      - name: Verify production release manifest has network permission
+        working-directory: spike/ibex_foundation
+        run: grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
       - name: Show candidate size
         working-directory: spike/ibex_foundation
