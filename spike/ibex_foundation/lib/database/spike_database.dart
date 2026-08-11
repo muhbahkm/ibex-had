@@ -19,6 +19,7 @@ part 'spike_database.g.dart';
     JournalEntries,
     JournalLines,
     Payments,
+    CustomerLedger,
     AuditLogs,
     OperationalDraftRecords,
     Customers,
@@ -34,7 +35,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -55,6 +56,11 @@ class SpikeDatabase extends _$SpikeDatabase {
             await m.createTable(units);
             await m.createTable(productUnits);
             await m.createTable(warehouses);
+          }
+          if (from < 5) {
+            await m.addColumn(sales, sales.customerId);
+            await m.addColumn(sales, sales.settlementMode);
+            await m.createTable(customerLedger);
           }
         },
         beforeOpen: (_) async {
