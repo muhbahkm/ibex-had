@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/errors/domain_error.dart';
+import '../core/time/business_document_calendar.dart';
 import '../core/value_objects/exchange_rate.dart';
 import '../core/value_objects/money.dart';
 import '../core/value_objects/scaled_math.dart';
@@ -19,13 +20,17 @@ class PostSaleService {
     this.db, {
     Uuid? uuid,
     SpikeFailureInjector? failureInjector,
+    BusinessDocumentCalendar calendar =
+        FixedOffsetBusinessDocumentCalendar.utc,
   })  : _uuid = uuid ?? const Uuid(),
         _sequence = DocumentSequenceService(db),
+        _calendar = calendar,
         _failureInjector = failureInjector;
 
   final SpikeDatabase db;
   final Uuid _uuid;
   final DocumentSequenceService _sequence;
+  final BusinessDocumentCalendar _calendar;
   final SpikeFailureInjector? _failureInjector;
 
   Future<PostSaleResult> execute(PostSaleCommand command) async {
@@ -155,7 +160,7 @@ class PostSaleService {
       final documentNo = await _sequence.nextNumber(
         businessId: command.businessId,
         documentType: 'sale',
-        year: command.saleAt.toUtc().year,
+        year: _calendar.documentYear(command.saleAt),
         prefix: 'SAL',
       );
       await _failAt('after_sequence');
