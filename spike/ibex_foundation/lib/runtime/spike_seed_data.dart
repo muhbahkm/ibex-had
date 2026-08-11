@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../core/text/arabic_search_normalizer.dart';
 import '../database/spike_database.dart';
+import '../security/authorization_service.dart';
 import 'spike_runtime_config.dart';
 
 class SpikeSeedData {
@@ -12,6 +13,7 @@ class SpikeSeedData {
     SpikeRuntimeConfig config = const SpikeRuntimeConfig(),
   }) async {
     final now = DateTime.now().toUtc();
+    final fxEffectiveAt = DateTime.utc(2026, 1, 1);
     await db.transaction(() async {
       await db.into(db.warehouses).insertOnConflictUpdate(
             WarehousesCompanion.insert(
@@ -22,6 +24,56 @@ class SpikeSeedData {
               updatedAt: now,
             ),
           );
+      await db.into(db.warehouses).insertOnConflictUpdate(
+            WarehousesCompanion.insert(
+              id: 'WH-SECONDARY',
+              businessId: config.businessId,
+              name: 'المستودع الفرعي',
+              normalizedName: ArabicSearchNormalizer.normalize('المستودع الفرعي'),
+              updatedAt: now,
+            ),
+          );
+
+      await db.into(db.appUsers).insertOnConflictUpdate(
+            AppUsersCompanion.insert(
+              id: config.userId,
+              businessId: config.businessId,
+              displayName: 'مدير IBEX التجريبي',
+              updatedAt: now,
+            ),
+          );
+      await db.into(db.roles).insertOnConflictUpdate(
+            RolesCompanion.insert(
+              id: 'ROLE-LOCAL-ADMIN',
+              businessId: config.businessId,
+              name: 'مدير التشغيل',
+              updatedAt: now,
+            ),
+          );
+      await db.into(db.userRoles).insertOnConflictUpdate(
+            UserRolesCompanion.insert(
+              businessId: config.businessId,
+              userId: config.userId,
+              roleId: 'ROLE-LOCAL-ADMIN',
+            ),
+          );
+      for (final permission in const [
+        OperationalPermissions.postSale,
+        OperationalPermissions.postPurchase,
+        OperationalPermissions.receiveCustomerPayment,
+        OperationalPermissions.paySupplier,
+        OperationalPermissions.transferStock,
+        OperationalPermissions.postSaleReturn,
+        OperationalPermissions.postPurchaseReturn,
+      ]) {
+        await db.into(db.rolePermissions).insertOnConflictUpdate(
+              RolePermissionsCompanion.insert(
+                businessId: config.businessId,
+                roleId: 'ROLE-LOCAL-ADMIN',
+                permission: permission,
+              ),
+            );
+      }
 
       await db.into(db.customers).insertOnConflictUpdate(
             CustomersCompanion.insert(
@@ -38,6 +90,15 @@ class SpikeSeedData {
               businessId: config.businessId,
               name: 'محمد عبدالله باحكم',
               normalizedName: ArabicSearchNormalizer.normalize('محمد عبدالله باحكم'),
+              updatedAt: now,
+            ),
+          );
+      await db.into(db.suppliers).insertOnConflictUpdate(
+            SuppliersCompanion.insert(
+              id: 'SUPPLIER-HONEY-DEMO',
+              businessId: config.businessId,
+              name: 'مورد العسل',
+              normalizedName: ArabicSearchNormalizer.normalize('مورد العسل'),
               updatedAt: now,
             ),
           );
@@ -68,6 +129,24 @@ class SpikeSeedData {
               isBase: Value(true),
             ),
           );
+
+      for (final rate in [
+        (id: 'FX-SAR-YER-DEMO', from: 'SAR', scaled: 425 * 100000000),
+        (id: 'FX-USD-YER-DEMO', from: 'USD', scaled: 1600 * 100000000),
+      ]) {
+        await db.into(db.fxRates).insertOnConflictUpdate(
+              FxRatesCompanion.insert(
+                id: rate.id,
+                businessId: config.businessId,
+                fromCurrency: rate.from,
+                toCurrency: config.baseCurrencyCode,
+                rateScaled: rate.scaled,
+                effectiveAt: fxEffectiveAt,
+                sourceNote: const Value('Disposable spike seed; replace with user-configured business rate before production.'),
+                createdAt: now,
+              ),
+            );
+      }
 
       final balance = await (db.select(db.inventoryBalances)
             ..where((row) =>
