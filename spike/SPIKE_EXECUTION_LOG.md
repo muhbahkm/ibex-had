@@ -84,3 +84,27 @@ The first hands-on review will focus on hierarchy, Arabic typography, spacing, c
 
 ### Promotion rule
 The emulator gate is **Passed**, but production scaffold promotion still requires representative-device security/runtime validation and the remaining critical foundation gates. The visual prototype may be installed for UX evaluation once its own CI/build gates are green; UX approval does not itself promote spike code to production.
+
+## 2026-08-11 — Purchase + Supplier Engine Gate started
+
+### Implemented in spike branch
+- Added supplier master data table scoped by business.
+- Added canonical purchase header/items, cash purchase payment, and supplier ledger tables.
+- Advanced Drift schema to v7 with additive migration from prior spike schemas.
+- Added typed `PostPurchaseCommand` and atomic `PostPurchaseService`.
+- Added purchase document numbering using `PUR-{YYYY}-{SEQUENCE}` inside the posting transaction.
+- Cash purchase posts inventory debit + cash credit and records a canonical purchase payment.
+- Credit purchase requires an explicit supplier, posts inventory debit + accounts-payable credit, and records supplier-ledger liability without a cash payment.
+- Purchase receipt creates `PURCHASE_IN` stock movement and increases canonical inventory quantity/value.
+- Moving weighted average cost is recomputed from old carrying value plus base-currency purchase value; repeated product lines preserve document detail while updating the canonical product/warehouse balance once.
+- Added idempotent replay through the shared operation log and unique purchase operation ID.
+- Extended the encrypted migration gate from v1 through v7 and added required-table assertions for purchase/supplier schema.
+- Added focused tests for cash purchase, credit purchase, duplicate product lines/WAC, idempotency, and rejection of credit purchase without supplier.
+
+### Current acceptance state
+- The previous Arabic local-search Foundation run for commit `4be5748c782d976d7764bb37818d961973aa1b92` completed successfully.
+- Foundation run `31500300977` for the purchase/WAC head `b3fb3dfb4149f4f92d30191f4b390f749dfe19e7` has started and is not yet accepted as green.
+- Android Runtime run `31500300775` for the same head has been queued/started separately and remains an acceptance gate.
+
+### Promotion rule
+Purchase/supplier code remains spike-only until Drift generation, analyzer, unit tests, encrypted migration tests, Android build, and Android encrypted-runtime gate complete successfully on the current head.
