@@ -9,6 +9,10 @@ on:
       - '.github/workflows/ibex-foundation-spike.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ibex-foundation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate-foundation:
     runs-on: ubuntu-latest
