@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../presentation/sale_chat_controller.dart';
-import 'ibex_operational_shell.dart';
+import 'ibex_operational_shell_v2.dart';
 
 class IbexRuntimeApp extends StatelessWidget {
   const IbexRuntimeApp({super.key, required this.controller});
@@ -26,7 +26,7 @@ class IbexRuntimeApp extends StatelessWidget {
       ),
       home: Directionality(
         textDirection: TextDirection.rtl,
-        child: IbexOperationalShell(controller: controller),
+        child: IbexOperationalShellV2(controller: controller),
       ),
     );
   }
