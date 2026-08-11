@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 
 import 'authorization_tables.dart';
+import 'business_settings_table.dart';
 import 'customer_receipts_table.dart';
 import 'expense_reversal_tables.dart';
 import 'expense_tables.dart';
@@ -58,6 +59,7 @@ part 'spike_database.g.dart';
     Units,
     ProductUnits,
     Warehouses,
+    BusinessSettings,
   ],
 )
 class SpikeDatabase extends _$SpikeDatabase {
@@ -66,7 +68,7 @@ class SpikeDatabase extends _$SpikeDatabase {
   factory SpikeDatabase.inMemory() => SpikeDatabase(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -121,6 +123,7 @@ class SpikeDatabase extends _$SpikeDatabase {
           if (from < 13) await m.createTable(fxRates);
           if (from < 14) await m.createTable(expenses);
           if (from < 15) await m.createTable(expenseReversals);
+          if (from < 16) await m.createTable(businessSettings);
         },
         beforeOpen: (_) async {
           await customStatement('PRAGMA foreign_keys = ON');
