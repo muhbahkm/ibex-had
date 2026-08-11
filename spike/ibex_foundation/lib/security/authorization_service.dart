@@ -14,6 +14,7 @@ class OperationalPermissions {
   static const postSaleReturn = 'sale_return.post';
   static const postPurchaseReturn = 'purchase_return.post';
   static const postExpense = 'expense.post';
+  static const reverseExpense = 'expense.reverse';
 }
 
 class AuthorizationService {
