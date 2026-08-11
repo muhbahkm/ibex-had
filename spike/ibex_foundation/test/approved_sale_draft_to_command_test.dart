@@ -28,7 +28,7 @@ OperationalDraft _saleDraft() => OperationalDraft(
       createdAtUtc: DateTime.utc(2026, 8, 11, 10),
     ).markAwaitingApproval();
 
-const _context = SalePostingContext(
+final _context = SalePostingContext(
   operationId: 'op-sale-draft-1',
   businessId: 'business-1',
   userId: 'user-1',
