@@ -69,7 +69,7 @@ class SaleDraftViewData {
   }
 }
 
-typedef SalePostingContextFactory = SalePostingContext Function(OperationalDraft draft);
+typedef SalePostingContextFactory = FutureOr<SalePostingContext> Function(OperationalDraft draft);
 
 class SaleChatController extends ChangeNotifier {
   SaleChatController({
@@ -346,7 +346,7 @@ class SaleChatController extends ChangeNotifier {
           }
           final result = await workflow.postApproved(
             draftId: current.draftId,
-            context: factory(current),
+            context: await factory(current),
           );
           _draft = await workflow.loadRequired(current.draftId);
           _messages.add(
