@@ -7,19 +7,24 @@ import 'operational_draft.dart';
 import 'operational_draft_repository.dart';
 import 'revise_sale_draft_service.dart';
 
+typedef PostSaleExecutor = Future<PostSaleResult> Function(PostSaleCommand command);
+
 class SaleOperationalWorkflow {
   SaleOperationalWorkflow({
     required this.createSaleDraft,
     required this.draftRepository,
     required this.postSaleService,
+    PostSaleExecutor? postSaleExecutor,
     ReviseSaleDraftService reviseSaleDraft = const ReviseSaleDraftService(),
     ApprovedSaleDraftToCommand mapper = const ApprovedSaleDraftToCommand(),
-  })  : _reviseSaleDraft = reviseSaleDraft,
+  })  : _postSaleExecutor = postSaleExecutor ?? postSaleService.execute,
+        _reviseSaleDraft = reviseSaleDraft,
         _mapper = mapper;
 
   final CreateSaleDraftService createSaleDraft;
   final OperationalDraftRepository draftRepository;
   final PostSaleService postSaleService;
+  final PostSaleExecutor _postSaleExecutor;
   final ReviseSaleDraftService _reviseSaleDraft;
   final ApprovedSaleDraftToCommand _mapper;
 
@@ -85,11 +90,11 @@ class SaleOperationalWorkflow {
   }) async {
     final approved = await loadRequired(draftId);
     final command = _mapper.build(draft: approved, context: context);
-    final result = await postSaleService.execute(command);
+    final result = await _postSaleExecutor(command);
 
-    // Persist the posted terminal state only after the Operating Engine commits.
-    // If posting fails, the approved draft remains retryable and no false posted
-    // state is stored.
+    // Persist the posted terminal state only after the authorized Operating
+    // Engine executor commits. If posting fails, the approved draft remains
+    // retryable and no false posted state is stored.
     final posted = approved.markPosted();
     await draftRepository.save(posted);
     return result;
