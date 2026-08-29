@@ -1,0 +1,29 @@
+name: IBEX HAD MCP
+
+on:
+  push:
+    branches:
+      - feat/ibex-had-accounting-mcp-v1
+    paths:
+      - 'mcp-server/**'
+      - '.github/workflows/ibex-had-mcp.yml'
+  pull_request:
+    paths:
+      - 'mcp-server/**'
+      - '.github/workflows/ibex-had-mcp.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm run smoke
