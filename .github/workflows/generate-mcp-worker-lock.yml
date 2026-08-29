@@ -1,0 +1,43 @@
+name: Generate MCP Worker Lockfile
+
+on:
+  push:
+    branches:
+      - feat/ibex-had-accounting-mcp-v1
+    paths:
+      - 'mcp-worker/package.json'
+      - 'mcp-worker/.npmrc'
+      - '.github/workflows/generate-mcp-worker-lock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ibex-had-accounting-mcp-v1
+          persist-credentials: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Generate package-lock.json
+        working-directory: mcp-worker
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Commit lockfile if changed
+        run: |
+          if git diff --quiet -- mcp-worker/package-lock.json && git ls-files --error-unmatch mcp-worker/package-lock.json >/dev/null 2>&1; then
+            echo "Lockfile already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mcp-worker/package-lock.json
+          git commit -m "chore(mcp): add Cloudflare worker lockfile"
+          git push
