@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ibex-had-accounting-mcp",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-08-29",
+  "observability": {
+    "enabled": true
+  }
+  // Production recommendation: bind Cloudflare Hyperdrive as HYPERDRIVE.
+  // Until then, set DATABASE_URL with `wrangler secret put DATABASE_URL`.
+  // Always set MCP_BEARER_TOKEN with `wrangler secret put MCP_BEARER_TOKEN`.
+}

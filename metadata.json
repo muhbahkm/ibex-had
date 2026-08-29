@@ -1,6 +1,0 @@
-{
-  "name": "Ibex Had",
-  "description": "Daily sales and operations management system for Bahkm Honey store with persistent database metadata.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
