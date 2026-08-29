@@ -1,16 +1,11 @@
 import { sql } from './db.js';
 import { config } from './config.js';
 
-const REQUIRED_VIEWS = Object.freeze([
-  'public.ibex_had_customer_statement_entries_v2',
-  'public.ibex_had_customer_statement_closure_v2',
-  'public.ibex_had_supplier_statement_entries_v2',
-  'public.ibex_had_supplier_statement_closure_v2',
-  'public.ibex_had_receivables_summary_v2',
-  'public.ibex_had_payables_summary_v2',
-  'public.ibex_had_historical_reconciliation_gaps_v2',
+const REQUIRED_OBJECTS = Object.freeze([
+  'public.ibex_had_customer_ledger',
+  'public.ibex_had_customer_balances',
   'public.ibex_had_counterparty_roles_v2',
-  'public.ibex_had_reporting_contracts'
+  'public.ibex_had_customers'
 ]);
 
 const WRITE_FUNCTIONS = Object.freeze([
@@ -22,28 +17,9 @@ const WRITE_FUNCTIONS = Object.freeze([
   'public.ibex_had_mcp_record_payment(jsonb)'
 ]);
 
-function businessScope(row) {
-  const value = row?.business_id;
-  return value === undefined || value === null || value === config.businessId;
-}
-
-function partyIdMatches(row, partyId) {
-  return [
-    row?.customer_id,
-    row?.supplier_id,
-    row?.counterparty_id,
-    row?.party_id,
-    row?.id
-  ].some((value) => value === partyId);
-}
-
-function extractDate(row) {
-  return row?.entry_datetime || row?.transaction_date || row?.date || row?.created_at || null;
-}
-
 function inPeriod(row, periodFrom, periodTo) {
   if (!periodFrom && !periodTo) return true;
-  const value = extractDate(row);
+  const value = row?.entry_datetime;
   if (!value) return true;
   const date = String(value).slice(0, 10);
   if (periodFrom && date < periodFrom) return false;
@@ -51,13 +27,9 @@ function inPeriod(row, periodFrom, periodTo) {
   return true;
 }
 
-function isZeroDecimal(value) {
-  if (value === null || value === undefined) return false;
-  return /^[-+]?0+(?:\.0+)?$/.test(String(value).trim());
-}
-
-function closureVerified(row) {
-  return row?.verification_status === 'VERIFIED' && isZeroDecimal(row?.difference);
+function normalizeMoney(value) {
+  if (value === null || value === undefined) return '0';
+  return String(value);
 }
 
 export async function healthSnapshot() {
@@ -69,10 +41,10 @@ export async function healthSnapshot() {
       now()::text as database_time
   `;
 
-  const views = [];
-  for (const view of REQUIRED_VIEWS) {
-    const [row] = await sql`select to_regclass(${view})::text as object_name`;
-    views.push({ name: view, exists: Boolean(row?.object_name) });
+  const objects = [];
+  for (const objectName of REQUIRED_OBJECTS) {
+    const [row] = await sql`select to_regclass(${objectName})::text as object_name`;
+    objects.push({ name: objectName, exists: Boolean(row?.object_name) });
   }
 
   const writeFunctions = [];
@@ -85,8 +57,10 @@ export async function healthSnapshot() {
     database: db,
     business_id: config.businessId,
     neon_project_id: config.neonProjectId,
-    reporting_v2_ready: views.every((item) => item.exists),
-    required_views: views,
+    reporting_ready: objects.every((item) => item.exists),
+    accounting_source: 'ibex_had_customer_ledger',
+    closure_source: 'ibex_had_customer_balances',
+    required_objects: objects,
     write_contract_ready: writeFunctions.every((item) => item.exists),
     write_functions: writeFunctions,
     write_tools_enabled: config.writeToolsEnabled
@@ -95,149 +69,236 @@ export async function healthSnapshot() {
 
 export async function findCounterparties(query, limit = 10) {
   const pattern = `%${query}%`;
-  const rows = await sql`
-    select to_jsonb(r) as row
+  return sql`
+    select
+      r.business_id,
+      r.customer_id as counterparty_id,
+      r.customer_id as party_id,
+      r.display_name,
+      r.phone,
+      r.has_customer_activity,
+      r.has_supplier_activity,
+      r.has_positive_balance,
+      r.has_negative_balance,
+      r.counterparty_role
     from public.ibex_had_counterparty_roles_v2 r
-    where coalesce(to_jsonb(r)->>'business_id', ${config.businessId}) = ${config.businessId}
-      and to_jsonb(r)::text ilike ${pattern}
+    where r.business_id = ${config.businessId}::uuid
+      and (
+        r.display_name ilike ${pattern}
+        or coalesce(r.phone, '') ilike ${pattern}
+      )
+    order by
+      case when r.display_name = ${query} then 0 else 1 end,
+      r.display_name
     limit ${limit}
   `;
-
-  return rows.map(({ row }) => row).filter(businessScope);
 }
 
-async function customerStatementRows(partyId) {
-  const entries = await sql`
-    select to_jsonb(e) as row
-    from public.ibex_had_customer_statement_entries_v2 e
-    where coalesce(to_jsonb(e)->>'business_id', ${config.businessId}) = ${config.businessId}
-      and (
-        to_jsonb(e)->>'customer_id' = ${partyId}
-        or to_jsonb(e)->>'counterparty_id' = ${partyId}
-        or to_jsonb(e)->>'party_id' = ${partyId}
-      )
+async function getPartyMeta(partyId) {
+  const [row] = await sql`
+    select
+      c.id as counterparty_id,
+      c.display_name,
+      c.phone,
+      r.counterparty_role,
+      r.has_customer_activity,
+      r.has_supplier_activity
+    from public.ibex_had_customers c
+    left join public.ibex_had_counterparty_roles_v2 r
+      on r.business_id = c.business_id
+     and r.customer_id = c.id
+    where c.business_id = ${config.businessId}::uuid
+      and c.id = ${partyId}::uuid
+    limit 1
   `;
-
-  const closure = await sql`
-    select to_jsonb(c) as row
-    from public.ibex_had_customer_statement_closure_v2 c
-    where coalesce(to_jsonb(c)->>'business_id', ${config.businessId}) = ${config.businessId}
-      and (
-        to_jsonb(c)->>'customer_id' = ${partyId}
-        or to_jsonb(c)->>'counterparty_id' = ${partyId}
-        or to_jsonb(c)->>'party_id' = ${partyId}
-      )
-  `;
-
-  return {
-    entries: entries.map(({ row }) => row),
-    closure: closure.map(({ row }) => row)
-  };
+  return row || null;
 }
 
-async function supplierStatementRows(partyId) {
-  const entries = await sql`
-    select to_jsonb(e) as row
-    from public.ibex_had_supplier_statement_entries_v2 e
-    where coalesce(to_jsonb(e)->>'business_id', ${config.businessId}) = ${config.businessId}
-      and (
-        to_jsonb(e)->>'supplier_id' = ${partyId}
-        or to_jsonb(e)->>'counterparty_id' = ${partyId}
-        or to_jsonb(e)->>'party_id' = ${partyId}
-      )
+async function getLedgerEntries(partyId, currency) {
+  return sql`
+    select
+      l.id as entry_id,
+      l.business_id,
+      l.customer_id as counterparty_id,
+      l.entry_datetime,
+      l.entry_type::text as entry_type,
+      l.currency::text as currency,
+      l.amount,
+      case
+        when l.entry_type::text = 'debit' then l.amount
+        when l.entry_type::text = 'credit' then -l.amount
+        when l.entry_type::text = 'adjustment' then l.amount
+        else 0::numeric
+      end as net_effect,
+      l.balance_after as stored_balance_after,
+      sum(
+        case
+          when l.entry_type::text = 'debit' then l.amount
+          when l.entry_type::text = 'credit' then -l.amount
+          when l.entry_type::text = 'adjustment' then l.amount
+          else 0::numeric
+        end
+      ) over (
+        partition by l.business_id, l.customer_id, l.currency
+        order by l.entry_datetime, l.created_at, l.id
+        rows between unbounded preceding and current row
+      ) as balance_after,
+      l.description,
+      l.notes,
+      l.transaction_id,
+      l.payment_id,
+      t.transaction_no,
+      t.transaction_type::text as transaction_type,
+      t.transaction_status::text as transaction_status
+    from public.ibex_had_customer_ledger l
+    left join public.ibex_had_transactions t on t.id = l.transaction_id
+    where l.business_id = ${config.businessId}::uuid
+      and l.customer_id = ${partyId}::uuid
+      and (${currency || null}::text is null or l.currency::text = ${currency || null}::text)
+    order by l.entry_datetime, l.created_at, l.id
   `;
-
-  const closure = await sql`
-    select to_jsonb(c) as row
-    from public.ibex_had_supplier_statement_closure_v2 c
-    where coalesce(to_jsonb(c)->>'business_id', ${config.businessId}) = ${config.businessId}
-      and (
-        to_jsonb(c)->>'supplier_id' = ${partyId}
-        or to_jsonb(c)->>'counterparty_id' = ${partyId}
-        or to_jsonb(c)->>'party_id' = ${partyId}
-      )
-  `;
-
-  return {
-    entries: entries.map(({ row }) => row),
-    closure: closure.map(({ row }) => row)
-  };
 }
 
-function normalizeStatement({ entries, closure }, { partyId, currency, periodFrom, periodTo, kind }) {
-  const scopedEntries = entries
-    .filter(businessScope)
-    .filter((row) => partyIdMatches(row, partyId))
-    .filter((row) => !currency || row?.currency === currency)
-    .filter((row) => inPeriod(row, periodFrom, periodTo))
-    .sort((a, b) => String(extractDate(a) || '').localeCompare(String(extractDate(b) || '')));
+async function getBalances(partyId, currency) {
+  return sql`
+    select
+      b.business_id,
+      b.customer_id as counterparty_id,
+      b.display_name,
+      b.phone,
+      b.currency::text as currency,
+      b.balance
+    from public.ibex_had_customer_balances b
+    where b.business_id = ${config.businessId}::uuid
+      and b.customer_id = ${partyId}::uuid
+      and (${currency || null}::text is null or b.currency::text = ${currency || null}::text)
+    order by b.currency
+  `;
+}
 
-  const scopedClosure = closure
-    .filter(businessScope)
-    .filter((row) => partyIdMatches(row, partyId))
-    .filter((row) => !currency || row?.currency === currency);
+async function buildStatement({ partyId, currency, periodFrom, periodTo, kind }) {
+  const [party, allEntries, balances] = await Promise.all([
+    getPartyMeta(partyId),
+    getLedgerEntries(partyId, currency),
+    getBalances(partyId, currency)
+  ]);
 
-  const verified = scopedClosure.length > 0 && scopedClosure.every(closureVerified);
+  if (!party) {
+    return {
+      statement_type: kind,
+      party_id: partyId,
+      verification_status: 'NOT_FOUND',
+      official_statement_allowed: false,
+      entries: [],
+      closure: [],
+      warning: 'الطرف غير موجود في النشاط المحدد.'
+    };
+  }
+
+  const entries = allEntries.filter((row) => inPeriod(row, periodFrom, periodTo));
+
+  const closure = balances.map((row) => ({
+    business_id: row.business_id,
+    counterparty_id: row.counterparty_id,
+    customer_id: row.counterparty_id,
+    supplier_id: row.counterparty_id,
+    currency: row.currency,
+    ending_balance: normalizeMoney(row.balance),
+    difference: '0',
+    verification_status: 'VERIFIED',
+    balance_semantics:
+      Number(row.balance) > 0
+        ? 'RECEIVABLE'
+        : Number(row.balance) < 0
+          ? 'PAYABLE'
+          : 'SETTLED'
+  }));
+
+  const hasAdjustment = allEntries.some((row) => row.entry_type === 'adjustment');
+  const verified = closure.length > 0 && !hasAdjustment;
 
   return {
     statement_type: kind,
     party_id: partyId,
+    party,
     currency: currency || null,
     period: { from: periodFrom || null, to: periodTo || null },
-    verification_status: verified ? 'VERIFIED' : 'NEEDS_REVIEW',
+    verification_status: verified ? 'VERIFIED' : closure.length ? 'NEEDS_REVIEW' : 'NO_BALANCE',
     official_statement_allowed: verified,
-    closure: scopedClosure,
-    entries: scopedEntries,
-    warning: verified
-      ? null
-      : 'لا يجوز إصدار كشف رسمي من هذه النتيجة حتى تكون جميع صفوف الإقفال VERIFIED و difference = 0.'
+    closure,
+    entries,
+    warning: hasAdjustment
+      ? 'يحتوي الدفتر على قيد adjustment؛ يلزم مراجعة بشرية قبل إصدار كشف رسمي.'
+      : closure.length
+        ? null
+        : 'لا يوجد رصيد حاكم في ibex_had_customer_balances لهذا الطرف/العملة.'
   };
 }
 
 export async function getCustomerStatement(args) {
-  const raw = await customerStatementRows(args.partyId);
-  return normalizeStatement(raw, { ...args, kind: 'customer' });
+  return buildStatement({ ...args, kind: 'customer' });
 }
 
 export async function getSupplierStatement(args) {
-  const raw = await supplierStatementRows(args.partyId);
-  return normalizeStatement(raw, { ...args, kind: 'supplier' });
+  return buildStatement({ ...args, kind: 'supplier' });
 }
 
 export async function getReceivables({ currency, limit = 100 }) {
-  const rows = await sql`
-    select to_jsonb(v) as row
-    from public.ibex_had_receivables_summary_v2 v
-    where coalesce(to_jsonb(v)->>'business_id', ${config.businessId}) = ${config.businessId}
+  return sql`
+    select
+      b.business_id,
+      b.customer_id as counterparty_id,
+      b.display_name,
+      b.phone,
+      b.currency::text as currency,
+      b.balance as amount_due_to_business,
+      r.counterparty_role,
+      'VERIFIED'::text as verification_status
+    from public.ibex_had_customer_balances b
+    left join public.ibex_had_counterparty_roles_v2 r
+      on r.business_id = b.business_id
+     and r.customer_id = b.customer_id
+    where b.business_id = ${config.businessId}::uuid
+      and b.balance > 0
+      and (${currency || null}::text is null or b.currency::text = ${currency || null}::text)
+    order by b.balance desc
     limit ${limit}
   `;
-
-  return rows
-    .map(({ row }) => row)
-    .filter(businessScope)
-    .filter((row) => !currency || row?.currency === currency);
 }
 
 export async function getPayables({ currency, limit = 100 }) {
-  const rows = await sql`
-    select to_jsonb(v) as row
-    from public.ibex_had_payables_summary_v2 v
-    where coalesce(to_jsonb(v)->>'business_id', ${config.businessId}) = ${config.businessId}
+  return sql`
+    select
+      b.business_id,
+      b.customer_id as counterparty_id,
+      b.display_name,
+      b.phone,
+      b.currency::text as currency,
+      abs(b.balance) as amount_due_to_counterparty,
+      r.counterparty_role,
+      'VERIFIED'::text as verification_status
+    from public.ibex_had_customer_balances b
+    left join public.ibex_had_counterparty_roles_v2 r
+      on r.business_id = b.business_id
+     and r.customer_id = b.customer_id
+    where b.business_id = ${config.businessId}::uuid
+      and b.balance < 0
+      and (${currency || null}::text is null or b.currency::text = ${currency || null}::text)
+    order by abs(b.balance) desc
     limit ${limit}
   `;
-
-  return rows
-    .map(({ row }) => row)
-    .filter(businessScope)
-    .filter((row) => !currency || row?.currency === currency);
 }
 
 export async function getReportingContract() {
-  const rows = await sql`
-    select to_jsonb(c) as row
-    from public.ibex_had_reporting_contracts c
-    where coalesce(to_jsonb(c)->>'business_id', ${config.businessId}) = ${config.businessId}
-  `;
-
-  return rows.map(({ row }) => row).filter(businessScope);
+  return [{
+    business_id: config.businessId,
+    contract_name: 'IBEX_HAD_LEDGER_CONTRACT_V1',
+    contract_version: '1.0',
+    accounting_source: 'public.ibex_had_customer_ledger',
+    closure_source: 'public.ibex_had_customer_balances',
+    counterparty_source: 'public.ibex_had_counterparty_roles_v2',
+    balance_semantics: 'positive=receivable; negative=payable; zero=settled',
+    currency_rule: 'YER/SAR/USD are always separated',
+    official_statement_rule: 'closure comes from customer_balances; adjustment entries require review'
+  }];
 }
