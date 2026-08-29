@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ibex-had-accounting-mcp",
+  "name": "ibex-had",
   "main": "src/server.ts",
   "compatibility_date": "2026-08-29",
   "observability": {
