@@ -6,14 +6,16 @@ on:
       - feat/ibex-had-accounting-mcp-v1
     paths:
       - 'mcp-server/**'
+      - 'mcp-worker/**'
       - '.github/workflows/ibex-had-mcp.yml'
   pull_request:
     paths:
       - 'mcp-server/**'
+      - 'mcp-worker/**'
       - '.github/workflows/ibex-had-mcp.yml'
 
 jobs:
-  validate:
+  node-transport:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,3 +29,18 @@ jobs:
       - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run check
       - run: npm run smoke
+
+  cloudflare-worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-worker
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm run dry-run
