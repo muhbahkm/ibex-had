@@ -1,0 +1,1 @@
+Preview branch is ready for Cloudflare Pages testing. Do not merge until `/api/health` confirms direct Neon connectivity and the core document flows are validated.
