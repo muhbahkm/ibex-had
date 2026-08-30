@@ -1,0 +1,2 @@
+Deploy branch: feature/ibex-had-chat-pwa
+Health check path: /api/health
